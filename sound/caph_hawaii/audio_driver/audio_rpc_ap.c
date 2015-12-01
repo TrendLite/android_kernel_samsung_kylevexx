@@ -154,9 +154,9 @@ void HandleAudioEventrespCb(RPC_Msg_t *pMsg,
 			addr);
 		AUDDRV_SetTuningFlag(0);
 		if (csl_caph_hwctrl_allPathsDisabled() == TRUE) {
-			csl_caph_ControlHWClock(FALSE);
-			csl_ControlHWClock_156m(FALSE);
 			csl_ControlHWClock_2p4m(FALSE);
+			csl_ControlHWClock_156m(FALSE);
+			csl_caph_ControlHWClock(FALSE);
 		}
 	}
 
@@ -231,7 +231,7 @@ void HandleAudioEventReqCb(RPC_Msg_t *pMsg,
 	RPC_SYSFreeResultDataBuffer(dataBufHandle);
 #endif
 }
-
+#if defined(CONFIG_BCM_MODEM)
 static void HandleAudioRpcNotification(
 	struct RpcNotificationEvent_t event, UInt8 clientID)
 {
@@ -264,7 +264,7 @@ static void HandleAudioRpcNotification(
 		break;
 	}
 }
-
+#endif
 #if defined(AUDIO_RPC_END_POINT)
 static RPC_Result_t AUDIO_RPC_MsgCb(PACKET_Interface_t interfaceType,
 		UInt8 cid, PACKET_BufHandle_t dataBufHandle)
