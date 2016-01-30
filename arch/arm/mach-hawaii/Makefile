@@ -39,6 +39,7 @@ obj-$(CONFIG_KONA_CPU_PM_HANDLER) += pm.o sleep.o pm_dbg.o
 obj-$(CONFIG_KONA_SECURE_MONITOR_CALL) += sec_api.o
 obj-$(CONFIG_HAWAII_PTM) += coresight.o
 obj-$(CONFIG_KONA_PROFILER) += profiler.o
+obj-$(CONFIG_FORCE_FAST_CHARGE) += fastchg.o
 obj-$(CONFIG_KONA_AXITRACE) += hawaii_axitrace.o
 
 obj-$(CONFIG_KONA_AVS) += avs.o

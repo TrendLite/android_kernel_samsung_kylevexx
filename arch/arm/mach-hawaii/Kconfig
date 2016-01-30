@@ -301,6 +301,13 @@ config	IGNORE_DAP_POWERUP_REQ
 	  PI policy will change to 7 always. This feature enables the system to
 	  retain the states as is, even after attaching JTAG.
 
+config FORCE_FAST_CHARGE
+       bool "Force AC charge mode at will"
+       default y
+       help
+         A simple sysfs interface to force adapters that
+         are detected as USB to charge as AC.  
+
 config	HAWAII_L2X0_PREFETCH
 	bool "Enable L2 cache prefetching for Hawaii platform"
 	default n
