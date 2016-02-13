@@ -92,6 +92,7 @@ void dwc_otg_core_soft_disconnect(dwc_otg_core_if_t *core_if, bool en)
 void w_init_core(void *p)
 {
 	dwc_otg_core_if_t *core_if = p;
+	dwc_otg_core_global_regs_t *global_regs = core_if->core_global_regs;
 
 	if (core_if) {
 		int retry = 0;
@@ -100,6 +101,13 @@ void w_init_core(void *p)
 #ifdef CONFIG_USB_DELAYED_SUSPEND_POWER_SAVING
 		DWC_TIMER_CANCEL(core_if->suspend_power_saving_timer);
 #endif
+		dwc_otg_disable_global_interrupts(core_if);
+
+		/* Clear any pending OTG Interrupts */
+		dwc_write_reg32(&global_regs->gotgint, 0xFFFFFFFF);
+
+		/* Clear any pending interrupts */
+		dwc_write_reg32(&global_regs->gintsts, 0xFFFFFFFF);
 
 #ifdef CONFIG_USB_OTG_UTILS
 
@@ -120,7 +128,6 @@ init_core_retry:
 			}
 		}
 #endif
-		dwc_otg_disable_global_interrupts(core_if);
 		if (dwc_otg_is_host_mode(core_if))
 			core_if->op_state = A_HOST;
 		else
@@ -177,13 +184,13 @@ void w_shutdown_core(void *p)
 	if (core_if) {
 	dwc_otg_core_global_regs_t *global_regs = core_if->core_global_regs;
 
+	dwc_otg_disable_global_interrupts(core_if);
+
 	/* Clear any pending OTG Interrupts */
 	dwc_write_reg32(&global_regs->gotgint, 0xFFFFFFFF);
 
 	/* Clear any pending interrupts */
 	dwc_write_reg32(&global_regs->gintsts, 0xFFFFFFFF);
-
-	dwc_otg_disable_global_interrupts(core_if);
 
 #ifdef CONFIG_USB_DELAYED_SUSPEND_POWER_SAVING
 		DWC_TIMER_CANCEL(core_if->suspend_power_saving_timer);
@@ -621,7 +628,9 @@ static void dwc_otg_enable_common_interrupts(dwc_otg_core_if_t *core_if)
 	if (!core_if->dma_enable)
 		intr_mask.b.rxstsqlvl = 1;
 
+#ifdef CONFIG_USB_OTG
 	intr_mask.b.conidstschng = 1;
+#endif
 	intr_mask.b.wkupintr = 1;
 	intr_mask.b.disconnect = 1;
 	intr_mask.b.usbsuspend = 1;
@@ -1289,10 +1298,15 @@ void dwc_otg_start_stop_phy_clk(dwc_otg_core_if_t *core_if, bool start)
 	pcgcctl_data_t pcgcctl = {.d32 = 0 };
 
 	/* Assert utmi_suspend_n for the PHY to turn off the Phy Clock.
-	 * This is Synopsys register and based on the documentation is
-	 * not on the AHB clock domain */
-	pcgcctl.b.stoppclk = start ? 0 : 1;
-	dwc_modify_reg32(core_if->pcgcctl, 0, pcgcctl.d32);
+	* This is Synopsys register and based on the documentation is
+	* not on the AHB clock domain */
+
+	pcgcctl.b.stoppclk = 1;
+
+	if (start)
+		dwc_modify_reg32(core_if->pcgcctl, pcgcctl.d32, 0);
+	else
+		dwc_modify_reg32(core_if->pcgcctl, 0, pcgcctl.d32);
 }
 
 int restore_essential_regs(dwc_otg_core_if_t *core_if, int rmode, int is_host)
