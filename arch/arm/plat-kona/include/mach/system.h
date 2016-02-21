@@ -28,16 +28,20 @@
 
 #include <linux/io.h>
 #include <mach/io_map.h>
+#include <mach/rdb/brcm_rdb_kpm_clk_mgr_reg.h>
+#include <mach/rdb/brcm_rdb_emmcsdxc.h>
+
+#if defined(CONFIG_ARCH_HAWAII)
 #include <mach/rdb/brcm_rdb_gicdist.h>
+#endif
+#if defined(CONFIG_ARCH_JAVA)
+#include <mach/rdb/brcm_rdb_gic.h>
+#endif
 #if defined(CONFIG_ARCH_ISLAND)
 #include <mach/rdb/brcm_rdb_iroot_rst_mgr_reg.h>
 #else
 #include <mach/rdb/brcm_rdb_root_rst_mgr_reg.h>
 #include <mach/rdb/brcm_rdb_bmdm_rst_mgr_reg.h>
-#endif
-
-#if defined( CONFIG_KONA_WFI_WORKAROUND )
-#include <mach/wfi_count.h>
 #endif
 
 #ifdef CONFIG_BCM_IDLE_PROFILER
@@ -48,18 +52,100 @@
 #include <linux/broadcom/knllog.h>
 #endif
 
+#include <plat/cpu.h>
+
 #ifdef CONFIG_BCM_IDLE_PROFILER
 DECLARE_PER_CPU(u32, idle_count);
+#endif
+
+#define RAW_WRITEL(v, a)	__raw_writel(v, (void __iomem __force *)a)
+#define RAW_READL(a)		__raw_readl((void __iomem __force *)a)
+
+#ifdef CONFIG_DISABLE_USBBOOT_NEXTBOOT
+static void  __disable_usb_in_next_boot(void)
+{
+	int reg_val;
+
+	/*
+	 * Temporary:
+	 * Disable USB Boot i.e when reboot command is issued
+	 * Boot ROM would ignore looking for USB connection and will
+	 * boot from eMMC - suggestion from BOOT ROM team
+	 */
+	reg_val = readl(KONA_CHIPREG_VA + 0x1C);
+	pr_info("Address:0x%x Value:0x%x \r\n",
+		KONA_CHIPREG_VA + 0x1C, reg_val);
+	reg_val &= ~0x00000002;
+	writel(reg_val, KONA_CHIPREG_VA + 0x1C);
+	reg_val = readl(KONA_CHIPREG_VA + 0x1C);
+	pr_info("Address:0x%x Value:0x%x \r\n",
+		KONA_CHIPREG_VA + 0x1C, reg_val);
+}
 #endif
 
 static void kona_reset(char mode, const char *cmd)
 {
 	unsigned int val;
+	unsigned int timeout;
+
+#ifdef CONFIG_DISABLE_USBBOOT_NEXTBOOT
+	if (get_chip_id() < KONA_CHIP_ID_JAVA_A1)
+		__disable_usb_in_next_boot();
+#endif
 
 	/*
 	 * Disable GIC interrupt distribution.
 	 */
+#if defined(CONFIG_ARCH_HAWAII)
 	__raw_writel(0, KONA_GICDIST_VA + GICDIST_ENABLE_S_OFFSET);
+#endif
+#if defined(CONFIG_ARCH_JAVA)
+	__raw_writel(0, KONA_GICDIST_VA + GIC_GICD_CTLR_OFFSET);
+#endif
+
+	/*
+	 * Some Hynix eMMC don't like abrupt clock shutdown.  When RPM
+	 * autosuspend is enabled, it takes time for the clock to be cut,
+	 * but during this time, the system reboot can abruptly cut it off.
+	 * Avoid that by disabling the clock to the card, right before
+	 * system reboot.
+	 */
+
+	/* Turn on KPM CCU */
+	val = KPM_CLK_MGR_REG_WR_ACCESS_CLKMGR_ACC_MASK |
+		(0xa5a5 << KPM_CLK_MGR_REG_WR_ACCESS_PASSWORD_SHIFT);
+	RAW_WRITEL(val, KONA_KPM_CLK_VA + KPM_CLK_MGR_REG_WR_ACCESS_OFFSET);
+
+	/* Enable eMMC SDHCI clkgate */
+	val = RAW_READL(KONA_KPM_CLK_VA + KPM_CLK_MGR_REG_SDIO2_CLKGATE_OFFSET);
+	val |= KPM_CLK_MGR_REG_SDIO2_CLKGATE_SDIO2_HW_SW_GATING_SEL_MASK |
+		KPM_CLK_MGR_REG_SDIO2_CLKGATE_SDIO2_CLK_EN_MASK |
+		KPM_CLK_MGR_REG_SDIO2_CLKGATE_SDIO2_AHB_HW_SW_GATING_SEL_MASK |
+		KPM_CLK_MGR_REG_SDIO2_CLKGATE_SDIO2_AHB_CLK_EN_MASK;
+	RAW_WRITEL(val, KONA_KPM_CLK_VA + KPM_CLK_MGR_REG_SDIO2_CLKGATE_OFFSET);
+
+	/* Wait for eMMC SDHCI clkgate to be enabled */
+	timeout = 10000;
+	do {
+		val = RAW_READL(KONA_KPM_CLK_VA +
+				KPM_CLK_MGR_REG_SDIO2_CLKGATE_OFFSET);
+		val &= KPM_CLK_MGR_REG_SDIO2_CLKGATE_SDIO2_STPRSTS_MASK |
+			KPM_CLK_MGR_REG_SDIO2_CLKGATE_SDIO2_AHB_STPRSTS_MASK;
+
+		if (val == (KPM_CLK_MGR_REG_SDIO2_CLKGATE_SDIO2_STPRSTS_MASK |
+			KPM_CLK_MGR_REG_SDIO2_CLKGATE_SDIO2_AHB_STPRSTS_MASK))
+			break;
+
+		udelay(1);
+		timeout--;
+	} while (timeout > 0);
+
+	/* Disable eMMC SDHCI clock if SDHCI clkgate is enabled successfully */
+	if (timeout > 0) {
+		val = RAW_READL(KONA_SDIO2_VA + EMMCSDXC_CTRL1_OFFSET);
+		val &= ~EMMCSDXC_CTRL1_SDCLKEN_MASK;
+		RAW_WRITEL(val, KONA_SDIO2_VA + EMMCSDXC_CTRL1_OFFSET);
+	}
 
 #if defined(CONFIG_ARCH_ISLAND)
 	/* enable reset register access */
