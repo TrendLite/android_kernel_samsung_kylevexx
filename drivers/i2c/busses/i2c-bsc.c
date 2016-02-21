@@ -32,7 +32,7 @@
 #include <linux/of_i2c.h>
 #include <mach/chip_pinmux.h>
 #include <mach/pinmux.h>
-
+#include <linux/tick.h>
 #ifdef CONFIG_DEBUG_FS
 #include <linux/seq_file.h>
 #include <linux/debugfs.h>
@@ -45,12 +45,12 @@
 /*  #include <linux/broadcom/timer.h> */
 
 #include <linux/timer.h>
-#include <mach/cpu.h>
+#include <plat/cpu.h>
 #include "i2c-bsc.h"
 
 #define DEFAULT_I2C_BUS_SPEED    BSC_BUS_SPEED_50K
 #define CMDBUSY_DELAY            100
-#define SES_TIMEOUT              (msecs_to_jiffies(100))
+#define SES_TIMEOUT              (msecs_to_jiffies(200))
 
 /* maximum RX/TX FIFO size in bytes */
 #define MAX_RX_FIFO_SIZE         64
@@ -628,9 +628,6 @@ static int bsc_xfer_write_fifo(struct bsc_i2c_dev *dev, unsigned int nak_ok,
 	/* enable TX FIFO */
 	bsc_set_tx_fifo((uint32_t)dev->virt_base, 1);
 
-	/* mark as incomplete before sending data to the TX FIFO */
-	INIT_COMPLETION(dev->tx_fifo_empty);
-
 	/* pointer to the source buffer */
 	tmp_buf = buf;
 
@@ -638,14 +635,17 @@ static int bsc_xfer_write_fifo(struct bsc_i2c_dev *dev, unsigned int nak_ok,
 	 * Write 64 bytes to the FIFO and wait for the TX FIFO full interrupt */
 	/* Keep writing 64 bytes of data to the FIFO */
 	for (i = 0 ; i < len/MAX_TX_FIFO_SIZE ; i++) {
-		/* Write 64 bytes of data */
-		bsc_write_data((uint32_t)dev->virt_base, tmp_buf,
-				MAX_TX_FIFO_SIZE);
-
 		/* Enable, check and disable the fifo empty interrupt */
 		bsc_enable_intr((uint32_t)dev->virt_base,
 				I2C_MM_HS_IER_FIFO_INT_EN_MASK |
 				I2C_MM_HS_IER_NOACK_EN_MASK);
+
+		/* mark as incomplete before sending data to the TX FIFO */
+		INIT_COMPLETION(dev->tx_fifo_empty);
+
+		/* Write 64 bytes of data */
+		bsc_write_data((uint32_t)dev->virt_base, tmp_buf,
+				MAX_TX_FIFO_SIZE);
 
 		time_left = wait_for_completion_timeout(&dev->tx_fifo_empty,
 							SES_TIMEOUT);
@@ -681,15 +681,17 @@ static int bsc_xfer_write_fifo(struct bsc_i2c_dev *dev, unsigned int nak_ok,
 	/* Transfer the remainder bytes if the data size is not a multiple of
 	 * 64 */
 	if (len % MAX_TX_FIFO_SIZE != 0) {
-
-		/* Write the remainder bytes */
-		bsc_write_data((uint32_t)dev->virt_base, tmp_buf,
-				(len % MAX_TX_FIFO_SIZE));
-
 		/* Enable, check and disable the fifo empty interrupt */
 		bsc_enable_intr((uint32_t)dev->virt_base,
 				I2C_MM_HS_IER_FIFO_INT_EN_MASK |
 				I2C_MM_HS_IER_NOACK_EN_MASK);
+
+		/* mark as incomplete before sending data to the TX FIFO */
+		INIT_COMPLETION(dev->tx_fifo_empty);
+
+		/* Write the remainder bytes */
+		bsc_write_data((uint32_t)dev->virt_base, tmp_buf,
+				(len % MAX_TX_FIFO_SIZE));
 
 		time_left = wait_for_completion_timeout(&dev->tx_fifo_empty,
 							SES_TIMEOUT);
@@ -1169,6 +1171,9 @@ static int bsc_xfer(struct i2c_adapter *adapter, struct i2c_msg msgs[], int num)
 #endif
 
 	mutex_lock(&dev->dev_lock);
+#if defined(CONFIG_ARCH_JAVA) || defined(CONFIG_ARCH_HAWAII)
+	pause_nohz();
+#endif
 	bsc_enable_clk(dev);
 	bsc_enable_pad_output((uint32_t)dev->virt_base, true);
 	hw_cfg = (struct bsc_adap_cfg *)dev->device->platform_data;
@@ -1176,14 +1181,10 @@ static int bsc_xfer(struct i2c_adapter *adapter, struct i2c_msg msgs[], int num)
 #ifdef CONFIG_KONA_PMU_BSC_USE_PMGR_HW_SEM
 	if (hw_cfg && hw_cfg->is_pmu_i2c) {
 		rc = pwr_mgr_pm_i2c_sem_lock();
-		if (rc) {
-			bsc_enable_pad_output((uint32_t)dev->virt_base, false);
-			bsc_disable_clk(dev);
-			mutex_unlock(&dev->dev_lock);
-			return rc;
-		} else {
+		if (rc)
+			goto out1;
+		else
 			rel_hw_sem = true;
-		}
 	}
 #endif
 	/* Enable the fifos based on the client requirement */
@@ -1206,7 +1207,7 @@ static int bsc_xfer(struct i2c_adapter *adapter, struct i2c_msg msgs[], int num)
 		rc = bsc_xfer_start(adapter);
 		if (rc < 0) {
 			dev_err(dev->device, "start command failed\n");
-			goto err_ret;
+			goto out;
 		}
 	}
 
@@ -1214,7 +1215,7 @@ static int bsc_xfer(struct i2c_adapter *adapter, struct i2c_msg msgs[], int num)
 	if (dev->high_speed_mode && hw_cfg && !hw_cfg->is_pmu_i2c) {
 		rc = start_high_speed_mode(adapter);
 		if (rc < 0)
-			goto err_ret;
+			goto out;
 	}
 
 	/* send the restart command in high-speed */
@@ -1291,17 +1292,8 @@ static int bsc_xfer(struct i2c_adapter *adapter, struct i2c_msg msgs[], int num)
 	else
 		bsc_set_autosense((uint32_t)dev->virt_base, 0, 0);
 
-	/* Disable the fifos if previously enabled */
-	client_fifo_configure(adapter, msgs[0].addr, false);
-
-	bsc_enable_pad_output((uint32_t)dev->virt_base, false);
-	bsc_disable_clk(dev);
-#ifdef CONFIG_KONA_PMU_BSC_USE_PMGR_HW_SEM
-	if (rel_hw_sem)
-		pwr_mgr_pm_i2c_sem_unlock();
-#endif
-	mutex_unlock(&dev->dev_lock);
-	return (rc < 0) ? rc : num;
+	rc = (rc < 0) ? rc : num;
+	goto out;
 
  hs_ret:
 
@@ -1318,15 +1310,19 @@ static int bsc_xfer(struct i2c_adapter *adapter, struct i2c_msg msgs[], int num)
 	else
 		bsc_set_autosense((uint32_t)dev->virt_base, 0, 0);
 
- err_ret:
-	/* Disable the fifos if previously enabled */
-	client_fifo_configure(adapter, msgs[0].addr, false);
-
-	bsc_enable_pad_output((uint32_t)dev->virt_base, false);
-	bsc_disable_clk(dev);
+out:
 #ifdef CONFIG_KONA_PMU_BSC_USE_PMGR_HW_SEM
 	if (rel_hw_sem)
 		pwr_mgr_pm_i2c_sem_unlock();
+#endif
+	/* Disable the fifos if previously enabled */
+	client_fifo_configure(adapter, msgs[0].addr, false);
+out1:
+	bsc_enable_pad_output((uint32_t)dev->virt_base, false);
+	bsc_disable_clk(dev);
+
+#if defined(CONFIG_ARCH_JAVA) || defined(CONFIG_ARCH_HAWAII)
+	resume_nohz();
 #endif
 	mutex_unlock(&dev->dev_lock);
 	return rc;
@@ -1811,10 +1807,6 @@ static int __devinit bsc_probe(struct platform_device *pdev)
 		else
 			clk_set_rate(dev->bsc_clk, hw_cfg->fs_ref);
 
-		/* Enable the bsc clocks */
-		rc = bsc_enable_clk(dev);
-		if (rc)
-			goto err_free_clk;
 	} else if (pdev->dev.of_node) {
 		const char *prop;
 		u32 val;
@@ -1901,10 +1893,6 @@ static int __devinit bsc_probe(struct platform_device *pdev)
 		else
 			clk_set_rate(dev->bsc_clk, hw_cfg->fs_ref);
 
-		/* Enable the bsc clocks */
-		rc = bsc_enable_clk(dev);
-		if (rc)
-			goto err_free_clk;
 	} else {
 		/* use default speed */
 		dev->speed = DEFAULT_I2C_BUS_SPEED;
@@ -1912,6 +1900,11 @@ static int __devinit bsc_probe(struct platform_device *pdev)
 		dev->bsc_clk = NULL;
 		dev->bsc_apb_clk = NULL;
 	}
+
+	/* Enable the bsc clocks */
+	rc = bsc_enable_clk(dev);
+	if (rc < 0)
+		goto err_free_clk;
 
 	/* Initialize the error flag */
 	dev->err_flag = 0;
@@ -1994,15 +1987,9 @@ static int __devinit bsc_probe(struct platform_device *pdev)
 	/* T-high in SS/FS mode varies when the clock gets stretched in the B0
 	 * Variant. The same was fixed in the B1 variant where a bit in the CRC
 	 * main register needs to be set. */
-	if (hw_cfg && !hw_cfg->is_pmu_i2c &&
-#if defined(CONFIG_ARCH_RHEA)
-		get_chip_id() >= RHEA_CHIP_ID(RHEA_CHIP_REV_B1)
-#elif defined(CONFIG_ARCH_HAWAII)
-		get_chip_id() >= HAWAII_CHIP_ID(HAWAII_CHIP_REV_A0)
-#else
-#error "unsupported platform"
-#endif
-	)
+	/* Check for RheaB1 onwards */
+	if (hw_cfg && !hw_cfg->is_pmu_i2c && 
+		(get_chip_id() >= KONA_CHIP_ID_RHEA_B1))
 		bsc_enable_thigh_ctrl((uint32_t)dev->virt_base, true);
 	else
 		bsc_enable_thigh_ctrl((uint32_t)dev->virt_base, false);
