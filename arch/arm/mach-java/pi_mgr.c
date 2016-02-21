@@ -22,7 +22,6 @@
 #include <asm/mach/arch.h>
 #include <mach/io_map.h>
 #include <mach/rdb/brcm_rdb_root_rst_mgr_reg.h>
-#include <mach/rdb/brcm_rdb_root_clk_mgr_reg.h>
 #include <mach/rdb/brcm_rdb_chipreg.h>
 #include <mach/rdb/brcm_rdb_mm_clk_mgr_reg.h>
 #include <mach/rdb/brcm_rdb_csr.h>
@@ -43,6 +42,7 @@
 #define	AON_PI_NUM_OPP			ARRAY_SIZE(__aon_opp_info)
 #define	SUB_SYS_PI_NUM_OPP		ARRAY_SIZE(kpm_opp_info)
 
+
 #ifdef CONFIG_PLL1_8PHASE_OFF_ERRATUM
 static struct clk *ref_8ph_en_pll1_clk;
 #endif
@@ -52,11 +52,11 @@ char *armc_core_ccu[] = { KPROC_CCU_CLK_NAME_STR };
 struct opp_info __arm_opp_info[] = {
 	INIT_OPP_INFO(PROC_CCU_FREQ_ID_ECO, PI_OPP_ECONOMY, 0),
 	INIT_OPP_INFO(PROC_CCU_FREQ_ID_NRML, PI_OPP_NORMAL,
-			A9_FREQ_NORMAL_DIV),
+			PROC_FREQ_NORMAL_DIV),
 	INIT_OPP_INFO(PROC_CCU_FREQ_ID_TURBO, PI_OPP_TURBO,
-			A9_FREQ_TURBO_DIV),
+			PROC_FREQ_TURBO_DIV),
 	INIT_OPP_INFO(PROC_CCU_FREQ_ID_SUPER_TURBO, PI_OPP_SUPER_TURBO, 0),
-	};
+};
 
 struct opp_info *arm_opp_info[] = {__arm_opp_info};
 
@@ -140,31 +140,29 @@ static int mm_pi_enable(struct pi *pi, int enable)
 {
 	int ret;
 	pi_dbg(pi->id, PI_LOG_EN_DIS, "%s\n", __func__);
-	writel(0x00A5A501, KONA_ROOT_CLK_VA +
-			ROOT_CLK_MGR_REG_WR_ACCESS_OFFSET);
 
 #ifdef CONFIG_PLL1_8PHASE_OFF_ERRATUM
 	if (is_pm_erratum(ERRATUM_PLL1_8PHASE_OFF)) {
 		if (enable && ref_8ph_en_pll1_clk)
-			clk_enable(ref_8ph_en_pll1_clk);
+			__clk_enable(ref_8ph_en_pll1_clk);
 	}
 #endif
-//
-//#ifdef CONFIG_MM_FREEZE_VAR500M_ERRATUM
-//	if (is_pm_erratum(ERRATUM_MM_FREEZE_VAR500M) && enable)
-//		var500m_clk_en_override(true);
-//#endif
+
+#ifdef CONFIG_MM_FREEZE_VAR500M_ERRATUM
+	if (is_pm_erratum(ERRATUM_MM_FREEZE_VAR500M) && enable)
+		var500m_clk_en_override(true);
+#endif
 	ret = gen_pi_ops.enable(pi, enable);
 
-//#ifdef CONFIG_MM_FREEZE_VAR500M_ERRATUM
-//	if (is_pm_erratum(ERRATUM_MM_FREEZE_VAR500M) && !enable)
-//		var500m_clk_en_override(false);
-//#endif
+#ifdef CONFIG_MM_FREEZE_VAR500M_ERRATUM
+	if (is_pm_erratum(ERRATUM_MM_FREEZE_VAR500M) && !enable)
+		var500m_clk_en_override(false);
+#endif
 
 #ifdef CONFIG_PLL1_8PHASE_OFF_ERRATUM
 	if (is_pm_erratum(ERRATUM_PLL1_8PHASE_OFF)) {
 		if (!enable && ref_8ph_en_pll1_clk)
-			clk_disable(ref_8ph_en_pll1_clk);
+			__clk_disable(ref_8ph_en_pll1_clk);
 	}
 #endif
 	return ret;
@@ -172,7 +170,8 @@ static int mm_pi_enable(struct pi *pi, int enable)
 static struct pi_ops mm_pi_ops;
 #endif
 
-static char *mm_ccu[] = { MM_CCU_CLK_NAME_STR };
+static char *mm_ccu[] = { MM_CCU_CLK_NAME_STR,
+				MM2_CCU_CLK_NAME_STR};
 
 struct opp_info __mm_opp_info[] = {
 	INIT_OPP_INFO(MM_CCU_FREQ_ID_ECO, PI_OPP_ECONOMY, 0),
@@ -184,7 +183,16 @@ struct opp_info __mm_opp_info[] = {
 #endif
 };
 
-struct opp_info *mm_opp_info[] = {__mm_opp_info};
+struct opp_info __mm2_opp_info[] = {
+	INIT_OPP_INFO(MM2_CCU_FREQ_ID_ECO, PI_OPP_ECONOMY, 0),
+	INIT_OPP_INFO(MM2_CCU_FREQ_ID_NRML, PI_OPP_NORMAL, 0),
+	INIT_OPP_INFO(MM2_CCU_FREQ_ID_TURBO, PI_OPP_TURBO, 0),
+#ifdef CONFIG_PI_MGR_MM_STURBO_ENABLE
+	INIT_OPP_INFO(MM2_CCU_FREQ_ID_SUPER_TURBO, PI_OPP_SUPER_TURBO, 0),
+#endif
+};
+
+struct opp_info *mm_opp_info[] = {__mm_opp_info, __mm2_opp_info};
 
 struct pi_opp mm_opp = {
 	.opp_info = mm_opp_info,
@@ -199,7 +207,7 @@ struct pi_opp mm_opp = {
 
 static struct pi_state mm_states[] = {
 	PI_STATE(PI_STATE_ACTIVE, RUN_POLICY, 0, 0),
-	//PI_STATE(PI_STATE_RETENTION, RETN_POLICY, 10, 0),
+	PI_STATE(PI_STATE_RETENTION, RETN_POLICY, 10, 0),
 	PI_STATE(PI_STATE_SHUTDOWN, SHTDWN_POLICY, 100, PI_STATE_SAVE_CONTEXT),
 };
 
@@ -576,13 +584,12 @@ struct pi *pi_list[] = {
 
 char *opp_names[] = {OPP_XTAL_STRING, OPP_ECONOMY_STRING,
 	OPP_NORMAL_STRING, OPP_TURBO_STRING, OPP_SUPER_TURBO_STRING};
-
 char *get_opp_name(int opp)
 {
 	if ((opp >= PI_OPP_MAX) || (opp < 0))
 		return NULL;
 	return opp_names[opp];
-}
+	}
 
 u32 get_opp_from_name(char *name)
 {
