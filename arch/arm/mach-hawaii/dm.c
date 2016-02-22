@@ -20,7 +20,6 @@
 #include <asm/memory.h>
 #include <linux/dma-mapping.h>
 #include <linux/spinlock.h>
-#include <linux/notifier.h>
 #include <asm/suspend.h>
 #include <mach/io_map.h>
 #include <mach/rdb/brcm_rdb_chipreg.h>
@@ -41,6 +40,13 @@
 #include <mach/sram_config.h>
 #include <plat/clock.h>
 #include <mach/sec_api.h>
+
+
+#ifdef CONFIG_SMP
+#define CORE1_BOOT_FUNC cpu_resume
+#else
+#define CORE1_BOOT_FUNC core1_boot
+#endif
 
 /* variable to store proc_ccu pointer. This is
  * used to enable/disable access to proc_ccu using
@@ -282,33 +288,25 @@ enum DORMANT_LOG_TYPE {
 
 static struct secure_params_t *secure_params;
 static int dormant_enter_continue(unsigned long data);
-static struct notifier_block panic_nb;
-static int panic_done;
 
 /*********** Local Functions *************/
 
-static int panic_event(struct notifier_block *this, unsigned long event,
-		void *ptr)
+#ifndef CONFIG_SMP
+static void core1_boot(void)
 {
-	int i;
-
-	if (panic_done)
-		return 0;
-
-	pr_info("-- Dump PROC_CLK registers --\n");
-
-	pr_info("[0x3FE00000]: %8x\n", readl(KONA_PROC_CLK_VA));
-
-	for (i = 0; i < ARRAY_SIZE(proc_clk_regs); )
-		pr_info("[%x]: %8x %8x %8x %8x\n",
-				proc_clk_regs[i],
-				readl(proc_clk_regs[i++]),
-				readl(proc_clk_regs[i++]),
-				readl(proc_clk_regs[i++]),
-				readl(proc_clk_regs[i++]));
-	panic_done = 1;
-	return 0;
+	do {
+		wfi();
+	} while (1);
 }
+
+#endif /*CONFIG_SMP*/
+
+static void __dsb_sev(void)
+{
+	dsb();
+	sev();
+}
+
 
 static inline void print_dbg_counters(void)
 {
@@ -337,7 +335,7 @@ static void save_addnl_regs(void)
 	int i;
 	struct reg_list *reg = (struct reg_list *) addnl_regs_v;
 	for (i = 0; i < ARRAY_SIZE(addnl_regs); i++, reg++) {
-		reg->val = readl(reg->addr);
+		reg->val = readl_relaxed(reg->addr);
 		reg->stored = 1;
 	}
 }
@@ -349,7 +347,7 @@ static void restore_addnl_regs(void)
 	int i;
 	struct reg_list *reg = (struct reg_list *) addnl_regs_v;
 	for (i = 0; i < ARRAY_SIZE(addnl_regs); i++, reg++) {
-		writel(reg->val, reg->addr);
+		writel_relaxed(reg->val, reg->addr);
 		reg->stored = 0;
 	}
 }
@@ -363,7 +361,7 @@ static void save_proc_clk_regs(void)
 	int i;
 	struct reg_list *reg = (struct reg_list *) proc_regs_v;
 	for (i = 0; i < ARRAY_SIZE(proc_clk_regs); i++, reg++) {
-		reg->val = readl(reg->addr);
+		reg->val = readl_relaxed(reg->addr);
 		reg->stored = 1;
 	}
 }
@@ -423,7 +421,7 @@ static void restore_proc_clk_regs(void)
 		       PROC_CLK_REG_ADDR(POLICY_CTL));
 
 	/* Wait until the new frequency takes effect */
-	insurance = 10000
+	insurance = 10000;
 	do {
 		udelay(1);
 		insurance--;
@@ -513,9 +511,7 @@ static void local_secure_api(unsigned service_id,
 
 
 #ifdef CONFIG_MOBICORE_DRIVER
-	/* Before getting new Mobicore OS binary,
-	   temporay block dormant secure api     */
-	//mobicore_smc(service_id,arg0,arg1,arg2);
+	mobicore_smc(service_id,arg0,arg1,arg2);
 
 #else
 	/* Set Up Registers to pass data to Secure Monitor */
@@ -570,9 +566,7 @@ u32 is_dormant_enabled(void)
 void dormant_enter(u32 service)
 {
 	unsigned long flgs;
-#if defined(CONFIG_SMP)
 	u32 boot_2nd_addr;
-#endif
 	u32 dormant_return;
 	u32 reg_val;
 
@@ -848,15 +842,12 @@ void dormant_enter(u32 service)
 		flush_cache_all();
 
 		instrument_lpm(LPM_TRACE_DRMNT_RS4, 0);
-#if defined(CONFIG_SMP)
+
 		if (smp_processor_id() == MASTER_CORE) {
 			/*
 			 * Here we got out of idle do we let the core-0
 			 * continue to run
 			 */
-			 /*boot secondary CPU if its not offlined*/
-			if (cpu_online(SECONDARY_CORE)) {
-
 				boot_2nd_addr =
 				    readl_relaxed(KONA_CHIPREG_VA +
 						  CHIPREG_BOOT_2ND_ADDR_OFFSET);
@@ -864,7 +855,7 @@ void dormant_enter(u32 service)
 				writel_relaxed(boot_2nd_addr,
 					       KONA_CHIPREG_VA +
 					       CHIPREG_BOOT_2ND_ADDR_OFFSET);
-				dsb_sev();
+				__dsb_sev();
 				/* Wait for core-0 to acknowledge the wake-up */
 				instrument_lpm(LPM_TRACE_DRMNT_CPU_WAIT1, 0);
 				do {
@@ -880,9 +871,8 @@ void dormant_enter(u32 service)
 			instrument_lpm(LPM_TRACE_DRMNT_CPU_WAIT2, 0);
 			while (num_cores_in_dormant)
 				udelay(1);
-			} /* core down */
 		} /* Master core */
-#endif
+
 
 	} /* Success dormant return */
 	instrument_lpm(LPM_TRACE_EXIT_DRMNT,
@@ -914,9 +904,14 @@ static int dormant_enter_continue(unsigned long data)
 
 	if (processor_id == MASTER_CORE) {
 
+		writel_relaxed(virt_to_phys(CORE1_BOOT_FUNC),
+			       KONA_CHIPREG_VA + CHIPREG_BOOT_2ND_ADDR_OFFSET);
+
+
 		secure_params->core0_reset_address = virt_to_phys(cpu_resume);
 
-		secure_params->core1_reset_address = virt_to_phys(cpu_resume);
+		secure_params->core1_reset_address =
+					virt_to_phys(CORE1_BOOT_FUNC);
 
 		secure_params->dram_log_buffer = drmt_buf_phy;
 
@@ -952,15 +947,18 @@ static int dormant_enter_continue(unsigned long data)
 
 		}
 	} else {
+
+#ifndef CONFIG_SMP
+		BUG();
+#else
 		/* Write the address where we want core-1 to boot */
-		writel_relaxed(virt_to_phys(cpu_resume),
+		writel_relaxed(virt_to_phys(CORE1_BOOT_FUNC),
 			       KONA_CHIPREG_VA + CHIPREG_BOOT_2ND_ADDR_OFFSET);
 
 		instrument_lpm(LPM_TRACE_DRMNT_WFI, 0);
 		/* Directly execute WFI for non core-0 cores */
 		wfi();
-		ret = 1;
-		instrument_lpm(LPM_TRACE_DRMNT_WFI_EXIT, 0);
+#endif
 	}
 	return ret;
 }
@@ -968,11 +966,15 @@ static int dormant_enter_continue(unsigned long data)
 /* Initialization function for dormant module */
 static int __init dormant_init(void)
 {
+#ifndef CONFIG_SMP
+	u32 boot_2nd_addr;
+#endif
 	struct resource *res;
 	void *vptr = NULL, *proc = NULL, *addnl = NULL;
 	struct clk *clk;
 	int i;
 	struct reg_list *reg;
+	int ret;
 
 	clk = clk_get(NULL, KPROC_CCU_CLK_NAME_STR);
 	if (IS_ERR_OR_NULL(clk))
@@ -1006,54 +1008,58 @@ static int __init dormant_init(void)
 	secure_params->log_index = 0;
 	secure_params->dram_log_buffer = drmt_buf_phy;
 
-#ifdef PM_USE_UNCACHED_BUFFER
 	/* un-cached memory for register save and restore */
 	proc = dma_alloc_coherent(NULL, SZ_4K,
 				  &proc_regs_p, GFP_ATOMIC);
 	if (proc == NULL) {
 		pr_info("%s: proc regs alloc failed\n", __func__);
+		dma_free_coherent(NULL, SZ_4K, vptr, drmt_buf_phy);		
 		return -ENOMEM;
 	}
+	pr_info("%s: proc clock registers buffer; proc = 0x%x",
+		__func__, (unsigned int)proc);
 	proc_regs_v = (u32) proc;
-#else
-	proc_regs_v = (u32) kzalloc(ARRAY_SIZE(proc_clk_regs) *
-			sizeof(struct reg_list), GFP_ATOMIC);
-	if (!proc_regs_v)
-		return -ENOMEM;
-#endif
-	pr_info("%s: proc clock registers buffer = 0x%x\n",
-		__func__, proc_regs_v);
 
 	reg = (struct reg_list *) proc_regs_v;
 	for (i = 0; i < ARRAY_SIZE(proc_clk_regs); i++, reg++)
 		reg->addr = proc_clk_regs[i];
 
-#ifdef PM_USE_UNCACHED_BUFFER
 	addnl = dma_alloc_coherent(NULL, SZ_4K,
 				  &addnl_regs_p, GFP_ATOMIC);
 	if (addnl == NULL) {
 		pr_info("%s: addnl regs alloc failed\n", __func__);
-		return -ENOMEM;
+		dma_free_coherent(NULL, SZ_4K, proc, proc_regs_p);
+		dma_free_coherent(NULL, SZ_4K, vptr, drmt_buf_phy);
+		ret = -ENOMEM;
+		goto free_proc;
 	}
+	pr_info("%s: addnl registers buffer; addnl = 0x%x",
+		__func__, (unsigned int)addnl);
 	addnl_regs_v = (u32) addnl;
-#else
-	addnl_regs_v = (u32) kzalloc(ARRAY_SIZE(addnl_regs) *
-			sizeof(struct reg_list), GFP_ATOMIC);
-	if (!addnl_regs_v)
-		return -ENOMEM;
-#endif
-	pr_info("%s: addnl registers buffer = 0x%x\n",
-		__func__, addnl_regs_v);
 
 	reg = (struct reg_list *) addnl_regs_v;
 	for (i = 0; i < ARRAY_SIZE(addnl_regs); i++, reg++)
 		reg->addr = addnl_regs[i];
 
-	panic_nb.notifier_call = panic_event;
-	panic_nb.next = NULL;
-	panic_nb.priority = 200;
-	atomic_notifier_chain_register(&panic_notifier_list, &panic_nb);
+#ifndef CONFIG_SMP
+	writel(virt_to_phys(CORE1_BOOT_FUNC) | 1,
+		KONA_CHIPREG_VA + CHIPREG_BOOT_2ND_ADDR_OFFSET);
+	__dsb_sev();
+	do {
+		boot_2nd_addr =
+			readl_relaxed(KONA_CHIPREG_VA +
+				CHIPREG_BOOT_2ND_ADDR_OFFSET);
+	} while (boot_2nd_addr & 1);
+#endif
 	return 0;
+
+free_proc:
+	dma_free_coherent(NULL, SZ_4K, proc, proc_regs_p);
+
+free_vptr:
+	dma_free_coherent(NULL, SZ_4K, vptr, drmt_buf_phy);
+
+	return ret;
 }
 
 module_init(dormant_init);
