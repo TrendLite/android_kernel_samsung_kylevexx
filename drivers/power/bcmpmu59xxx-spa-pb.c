@@ -42,10 +42,14 @@ static int dbg_mask = BCMPMU_PRINT_ERROR | BCMPMU_PRINT_INIT |
 #define SPA_FIFO_SIZE	16
 #define SPA_FIFO_IS_EMPTY(f) ((f).head == (f).tail && !(f).full)
 #define SPA_FIFO_IS_FULL(f) ((f).full)
+#define ADC_RETRY_DELAY		100 /* 100ms */
 
 #define SPA_WORK_SCHEDULE_DELAY	0
 
 #define SPA_ADC_READ_TRIES 5
+
+struct bcmpmu59xxx *bcmpmu_info;
+
 struct spa_event_fifo {
 	u32 head;
 	u32 tail;
@@ -86,6 +90,7 @@ static enum power_supply_property bcmpmu_spa_pb_chrgr_props[] = {
 	POWER_SUPPLY_PROP_TYPE,
 	POWER_SUPPLY_PROP_PRESENT,
 	POWER_SUPPLY_PROP_CURRENT_NOW,
+	POWER_SUPPLY_PROP_CURRENT_AVG,
 	POWER_SUPPLY_PROP_CHARGE_FULL_DESIGN,
 	POWER_SUPPLY_PROP_BATT_TEMP_ADC,
 };
@@ -137,14 +142,14 @@ static int bcmpmu_spa_pb_chrgr_set_property(struct power_supply *ps,
 			while (retries--) {
 				msleep(100);
 				bcmpmu->read_dev(bcmpmu, PMU_REG_ENV2, &reg);
-				if(bcmpmu_spa_pb->chg_type == PMU_CHRGR_TYPE_NONE)
+				if (bcmpmu_spa_pb->chg_type == PMU_CHRGR_TYPE_NONE)
 					break;
 
-				if(reg & ENV2_P_UBPD_INT) {
+				if (reg & ENV2_P_UBPD_INT) {
 			bcmpmu_chrgr_usb_en(bcmpmu, 1);
 					break;
 				} else {
-					if(!retries)
+					if (!retries)
 						pr_pb(FLOW, "%s: enable charging fail\n", __func__);
 				}
 			}
@@ -202,6 +207,7 @@ static void  spa_bcmpmu_adc_read(struct bcmpmu59xxx *bcmpmu,
 		ret = bcmpmu_adc_read(bcmpmu, channel, req, result);
 		if (!ret)
 			break;
+		msleep(ADC_RETRY_DELAY);
 	}
 	BUG_ON(retries <= 0);
 }
@@ -254,7 +260,7 @@ static int bcmpmu_spa_pb_chrgr_get_property(struct power_supply *ps,
 	case POWER_SUPPLY_PROP_TEMP:
 	case POWER_SUPPLY_PROP_BATT_TEMP_ADC:
 		spa_bcmpmu_adc_read(bcmpmu, PMU_ADC_CHANN_NTC,
-				PMU_ADC_REQ_SAR_MODE, &adc_result);
+				PMU_ADC_REQ_RTM_MODE, &adc_result);
 		bcmpmu_spa_pb->temp_adc = adc_result.raw;
 		if (prop == POWER_SUPPLY_PROP_BATT_TEMP_ADC)
 			propval->intval = adc_result.raw;
@@ -268,7 +274,7 @@ static int bcmpmu_spa_pb_chrgr_get_property(struct power_supply *ps,
 
 	case POWER_SUPPLY_PROP_VOLTAGE_NOW:
 		spa_bcmpmu_adc_read(bcmpmu, PMU_ADC_CHANN_VMBATT,
-				PMU_ADC_REQ_SAR_MODE, &adc_result);
+				PMU_ADC_REQ_RTM_MODE, &adc_result);
 
 		bcmpmu_spa_pb->vbat = adc_result.conv;
 		propval->intval = adc_result.conv;
@@ -276,7 +282,7 @@ static int bcmpmu_spa_pb_chrgr_get_property(struct power_supply *ps,
 
 	case POWER_SUPPLY_PROP_PRESENT:
 		spa_bcmpmu_adc_read(bcmpmu, PMU_ADC_CHANN_BSI,
-				PMU_ADC_REQ_SAR_MODE, &adc_result);
+				PMU_ADC_REQ_RTM_MODE, &adc_result);
 
 		bcmpmu_spa_pb->present = adc_result.raw;
 		propval->intval = (adc_result.raw == 0x3FF) ? 0 : 1;
@@ -284,6 +290,10 @@ static int bcmpmu_spa_pb_chrgr_get_property(struct power_supply *ps,
 
 	case POWER_SUPPLY_PROP_CURRENT_NOW:
 		pr_pb(FLOW, "%s: POWER_SUPPLY_PROP_CURRENT_NOW\n", __func__);
+		break;
+
+	case POWER_SUPPLY_PROP_CURRENT_AVG:
+		propval->intval = bcmpmu_fg_get_current_currentavg(bcmpmu);
 		break;
 
 	case POWER_SUPPLY_PROP_CHARGE_FULL_DESIGN:
@@ -295,7 +305,7 @@ static int bcmpmu_spa_pb_chrgr_get_property(struct power_supply *ps,
 		ret = -ENODATA;
 		break;
 	}
-	pr_pb(FLOW, "%s: prop = %d, ret = %d intval = %d\n",
+	pr_pb(VERBOSE, "%s: prop = %d, ret = %d intval = %d\n",
 			__func__,
 			prop, ret, propval->intval);
 	return ret;
@@ -310,8 +320,10 @@ int bcmpmu_post_spa_event_to_queue(struct bcmpmu59xxx *bcmpmu, u32 event,
 	pr_pb(FLOW, "%s: event = %d\n", __func__, event);
 
 	/* BUG_ON(!bcmpmu_spa_pb); */
-	if(!bcmpmu_spa_pb) {
-		pr_pb(ERROR, "%s: spa_pb is null, and not ready yet\n", __func__);
+	if (!bcmpmu_spa_pb) {
+		pr_pb(ERROR,
+			"%s: spa_pb is null, and not ready yet\n",
+			__func__);
 		msleep(500);
 		return -1;
 	}
@@ -347,27 +359,27 @@ static int __map_to_spa_event(u32 event)
 {
 	int ret = -EINVAL;
 	switch (event) {
-	case BCMPMU_CHRGR_EVENT_MBTEMP:
+	case PMU_CHRGR_EVT_MBTEMP:
 		ret = SPA_EVT_TEMP;
 		break;
 
-	case BCMPMU_CHRGR_EVENT_CHGR_DETECTION:
+	case PMU_ACCY_EVT_OUT_CHRGR_TYPE:
 		ret = SPA_EVT_CHARGER;
 		break;
 
-	case BCMPMU_CHRGR_EVENT_MBOV:
+	case PMU_CHRGR_EVT_MBOV:
 		ret = SPA_EVT_OVP;
 		break;
 
-	case BCMPMU_CHRGR_EVENT_USBOV:
+	case PMU_ACCY_EVT_OUT_USBOV:
 		ret = SPA_EVT_OVP;
 		break;
 
-	case BCMPMU_CHRGR_EVENT_EOC:
+	case PMU_CHRGR_EVT_EOC:
 		ret = SPA_EVT_EOC;
 		break;
 
-	case BCMPMU_CHRGR_EVENT_CAPACITY:
+	case PMU_FG_EVT_CAPACITY:
 		ret = SPA_EVT_CAPACITY;
 		break;
 
@@ -387,7 +399,7 @@ static void bcmpmu_spa_pb_work(struct work_struct *work)
 		pr_pb(FLOW, "%s: event = %d\n", __func__, event);
 		spa_evt = __map_to_spa_event(event);
 		BUG_ON(spa_evt < 0 || spa_evt >= SPA_EVT_MAX);
-		if (BCMPMU_CHRGR_EVENT_CAPACITY == event) {
+		if (PMU_FG_EVT_CAPACITY == event) {
 			bcmpmu_spa_pb->capacity = data;
 			pr_pb(FLOW, "%s: capacity = %d\n", __func__, data);
 		}
@@ -406,11 +418,11 @@ static int bcmpmu_spa_pb_event_hndlr(struct notifier_block *nb,
 	struct bcmpmu_spa_pb *bcmpmu_spa_pb = NULL;
 	u32 data;
 
-	pr_pb(FLOW, "%s, event=%u\n",
+	pr_pb(FLOW, "%s, event=%lu\n",
 			__func__, event);
 
 	switch (event) {
-	case BCMPMU_CHRGR_EVENT_CHGR_DETECTION:
+	case PMU_ACCY_EVT_OUT_CHRGR_TYPE:
 		bcmpmu_spa_pb = container_of(nb, struct bcmpmu_spa_pb,
 				nb_chgr_det);
 		BUG_ON(bcmpmu_spa_pb == NULL || para == NULL);
@@ -439,14 +451,14 @@ static int bcmpmu_spa_pb_event_hndlr(struct notifier_block *nb,
 			event, data);
 #endif
 		break;
-	case BCMPMU_USB_EVENT_IN:
-		pr_pb(FLOW, "%s, BCMPMU_USB_EVENT_IN\n",
+	case PMU_ACCY_EVT_OUT_USB_IN:
+		pr_pb(FLOW, "%s, PMU_ACCY_EVT_OUT_USB_IN\n",
 					__func__);
 		break;
 
 	default:
 		break;
-		//BUG();
+		/* BUG(); */
 	}
 	return 0;
 }
@@ -460,32 +472,32 @@ static void bcmpmu_spa_pb_isr(u32 irq, void *data)
 	case PMU_IRQ_MBTEMPHIGH:
 		bcmpmu_spa_pb->temp_lmt = 1;
 		bcmpmu_post_spa_event_to_queue(bcmpmu_spa_pb->bcmpmu,
-			BCMPMU_CHRGR_EVENT_MBTEMP,
+			PMU_CHRGR_EVT_MBTEMP,
 			POWER_SUPPLY_HEALTH_OVERHEAT);
 		break;
 
 	case PMU_IRQ_MBTEMPLOW:
 		bcmpmu_spa_pb->temp_lmt = 1;
 		bcmpmu_post_spa_event_to_queue(bcmpmu_spa_pb->bcmpmu,
-			BCMPMU_CHRGR_EVENT_MBTEMP,
+			PMU_CHRGR_EVT_MBTEMP,
 			POWER_SUPPLY_HEALTH_COLD);
 		break;
 
 	case PMU_IRQ_CHGERRDIS:
 		if (bcmpmu_spa_pb->temp_lmt) {
 			bcmpmu_post_spa_event_to_queue(bcmpmu_spa_pb->bcmpmu,
-				BCMPMU_CHRGR_EVENT_MBTEMP,
+				PMU_CHRGR_EVT_MBTEMP,
 				POWER_SUPPLY_HEALTH_GOOD);
 			bcmpmu_spa_pb->temp_lmt = 0;
 		}
 		if (bcmpmu_spa_pb->mb_ov) {
 			bcmpmu_post_spa_event_to_queue(bcmpmu_spa_pb->bcmpmu,
-				BCMPMU_CHRGR_EVENT_MBOV, 0);
+				PMU_CHRGR_EVT_MBOV, 0);
 			bcmpmu_spa_pb->mb_ov = 0;
 		}
 		if (bcmpmu_spa_pb->usb_ov) {
 			bcmpmu_post_spa_event_to_queue(bcmpmu_spa_pb->bcmpmu,
-				BCMPMU_CHRGR_EVENT_USBOV, 0);
+				PMU_ACCY_EVT_OUT_USBOV_DIS, 0);
 			bcmpmu_spa_pb->usb_ov = 0;
 		}
 		break;
@@ -493,27 +505,14 @@ static void bcmpmu_spa_pb_isr(u32 irq, void *data)
 	case PMU_IRQ_MBOV:
 		bcmpmu_spa_pb->mb_ov = 1;
 		bcmpmu_post_spa_event_to_queue(bcmpmu_spa_pb->bcmpmu,
-			BCMPMU_CHRGR_EVENT_MBOV, 1);
+			PMU_CHRGR_EVT_MBOV, 1);
 		break;
 
 	case PMU_IRQ_MBOV_DIS:
 		if (bcmpmu_spa_pb->mb_ov) {
 			bcmpmu_post_spa_event_to_queue(bcmpmu_spa_pb->bcmpmu,
-				BCMPMU_CHRGR_EVENT_MBOV, 0);
+				PMU_CHRGR_EVT_MBOV, 0);
 			bcmpmu_spa_pb->mb_ov = 0;
-		}
-		break;
-
-	case PMU_IRQ_USBOV:
-		bcmpmu_spa_pb->usb_ov = 1;
-		bcmpmu_post_spa_event_to_queue(bcmpmu_spa_pb->bcmpmu,
-			BCMPMU_CHRGR_EVENT_USBOV, 1);
-		break;
-	case PMU_IRQ_USBOV_DIS:
-		if (bcmpmu_spa_pb->usb_ov) {
-			bcmpmu_post_spa_event_to_queue(bcmpmu_spa_pb->bcmpmu,
-				BCMPMU_CHRGR_EVENT_USBOV, 0);
-			bcmpmu_spa_pb->usb_ov = 0;
 		}
 		break;
 
@@ -582,7 +581,7 @@ err:
 }
 #endif
 
-static int __devinit bcmpmu_spa_pb_probe(struct platform_device *pdev)
+static int bcmpmu_spa_pb_probe(struct platform_device *pdev)
 {
 	int ret = 0;
 	struct bcmpmu_spa_pb *bcmpmu_spa_pb;
@@ -596,6 +595,7 @@ static int __devinit bcmpmu_spa_pb_probe(struct platform_device *pdev)
 		dev_err(&pdev->dev, "failed to alloc mem: %d\n", ret);
 		return -ENOMEM;
 	}
+	bcmpmu_info = bcmpmu;
 	bcmpmu_spa_pb->bcmpmu = bcmpmu;
 	bcmpmu->spa_pb_info = (void *)bcmpmu_spa_pb;
 
@@ -645,7 +645,7 @@ static int __devinit bcmpmu_spa_pb_probe(struct platform_device *pdev)
 #endif
 
 	bcmpmu_spa_pb->nb_chgr_det.notifier_call = bcmpmu_spa_pb_event_hndlr;
-	ret = bcmpmu_add_notifier(BCMPMU_CHRGR_EVENT_CHGR_DETECTION,
+	ret = bcmpmu_add_notifier(PMU_ACCY_EVT_OUT_CHRGR_TYPE,
 		&bcmpmu_spa_pb->nb_chgr_det);
 	if (ret) {
 		pr_pb(ERROR, "%s, failed to register chrgr det notifier\n",
@@ -653,7 +653,7 @@ static int __devinit bcmpmu_spa_pb_probe(struct platform_device *pdev)
 		goto err;
 	}
 	bcmpmu_spa_pb->nb_usbin.notifier_call = bcmpmu_spa_pb_event_hndlr;
-	ret = bcmpmu_add_notifier(BCMPMU_USB_EVENT_IN,
+	ret = bcmpmu_add_notifier(PMU_ACCY_EVT_OUT_USB_IN,
 		&bcmpmu_spa_pb->nb_usbin);
 	if (ret) {
 		pr_pb(ERROR, "%s, failed to register chrgr det notifier\n",
@@ -668,9 +668,9 @@ static int __devinit bcmpmu_spa_pb_probe(struct platform_device *pdev)
 	return 0;
 
 err:
-	bcmpmu_remove_notifier(BCMPMU_CHRGR_EVENT_CHGR_DETECTION,
+	bcmpmu_remove_notifier(PMU_ACCY_EVT_OUT_CHRGR_TYPE,
 			&bcmpmu_spa_pb->nb_chgr_det);
-	bcmpmu_remove_notifier(BCMPMU_USB_EVENT_IN,
+	bcmpmu_remove_notifier(PMU_ACCY_EVT_OUT_USB_IN,
 			&bcmpmu_spa_pb->nb_usbin);
 	power_supply_unregister(&bcmpmu_spa_pb->chrgr);
 cghr_err:
@@ -678,7 +678,7 @@ cghr_err:
 	return ret;
 }
 
-static int __devexit bcmpmu_spa_pb_remove(struct platform_device *pdev)
+static int bcmpmu_spa_pb_remove(struct platform_device *pdev)
 {
 	struct bcmpmu59xxx *bcmpmu = dev_get_drvdata(pdev->dev.parent);
 	struct bcmpmu_spa_pb *bcmpmu_spa_pb = bcmpmu->spa_pb_info;
@@ -689,14 +689,10 @@ static int __devexit bcmpmu_spa_pb_remove(struct platform_device *pdev)
 	bcmpmu->unregister_irq(bcmpmu, PMU_IRQ_MBOV);
 	bcmpmu->unregister_irq(bcmpmu, PMU_IRQ_MBOV_DIS);
 	bcmpmu->unregister_irq(bcmpmu, PMU_IRQ_EOC);
-#if 0	
-	bcmpmu->unregister_irq(bcmpmu, PMU_IRQ_USBOV);
-	bcmpmu->unregister_irq(bcmpmu, PMU_IRQ_USBOV_DIS);
-#endif
 
-	bcmpmu_remove_notifier(BCMPMU_CHRGR_EVENT_CHGR_DETECTION,
+	bcmpmu_remove_notifier(PMU_ACCY_EVT_OUT_CHRGR_TYPE,
 			&bcmpmu_spa_pb->nb_chgr_det);
-	bcmpmu_remove_notifier(BCMPMU_USB_EVENT_IN,
+	bcmpmu_remove_notifier(PMU_ACCY_EVT_OUT_USB_IN,
 			&bcmpmu_spa_pb->nb_usbin);
 	power_supply_unregister(&bcmpmu_spa_pb->chrgr);
 	kfree(bcmpmu_spa_pb);
@@ -709,7 +705,7 @@ static struct platform_driver bcmpmu_spa_pb_drv = {
 		.name = "bcmpmu_spa_pb",
 	},
 	.probe = bcmpmu_spa_pb_probe,
-	.remove = __devexit_p(bcmpmu_spa_pb_remove),
+	.remove = bcmpmu_spa_pb_remove,
 };
 
 static int __init bcmpmu_spa_pb_init(void)

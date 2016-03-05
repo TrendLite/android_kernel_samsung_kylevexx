@@ -935,7 +935,7 @@ static int rgltr_set_trim_vlt(const char *consumer, u32 vreq, int rgltr_id)
 	struct bcmpmu59xxx_rgltr_param *param;
 
 	rglr = regulator_get(NULL, consumer);
-	if (unlikely(IS_ERR_OR_NULL(rglr))) {
+	if (unlikely(IS_ERR(rglr))) {
 		pr_info("regulator_get for %s failed\n", consumer);
 		return -EINVAL;
 	}
@@ -987,7 +987,7 @@ static ssize_t bcmpmu_dbg_rgltr_enable(struct file *file,
 	/* coverity[secure_coding] */
 	sscanf(input_str, "%s", consumer);
 	regl = regulator_get(NULL, consumer);
-	if (unlikely(IS_ERR_OR_NULL(regl))) {
+	if (unlikely(IS_ERR(regl))) {
 		pr_info("regulator_get for %s failed\n", consumer);
 		return count;
 	}
@@ -1017,7 +1017,7 @@ static ssize_t bcmpmu_dbg_rgltr_disable(struct file *file,
 	/* coverity[secure_coding] */
 	sscanf(input_str, "%s", consumer);
 	regl = regulator_get(NULL, consumer);
-	if (unlikely(IS_ERR_OR_NULL(regl))) {
+	if (unlikely(IS_ERR(regl))) {
 		pr_info("regulator_get for %s failed\n", consumer);
 		return count;
 	}
@@ -1056,7 +1056,7 @@ static ssize_t bcmpmu_dbg_rgltr_set_vlt(struct file *file,
 
 	pr_info("%s, %u %u\n", consumer, min_v, max_v);
 	regl = regulator_get(NULL, consumer);
-	if (unlikely(IS_ERR_OR_NULL(regl))) {
+	if (unlikely(IS_ERR(regl))) {
 		pr_info("regulator_get for %s failed\n", consumer);
 		return count;
 	}
@@ -1091,7 +1091,7 @@ static ssize_t bcmpmu_dbg_rgltr_get_vlt(struct file *file,
 	}
 
 	regl = regulator_get(NULL, consumer);
-	if (unlikely(IS_ERR_OR_NULL(regl))) {
+	if (unlikely(IS_ERR(regl))) {
 		pr_info("regulator_get for %s failed\n", consumer);
 		return count;
 	}
@@ -1121,7 +1121,7 @@ static ssize_t bcmpmu_dbg_is_rgltr_enable(struct file *file,
 	/* coverity[secure_coding] */
 	sscanf(input_str, "%s", consumer);
 	regl = regulator_get(NULL, consumer);
-	if (unlikely(IS_ERR_OR_NULL(regl))) {
+	if (unlikely(IS_ERR(regl))) {
 		pr_info("regulator_get for %s failed\n", consumer);
 		return count;
 	}
@@ -1158,7 +1158,7 @@ static ssize_t bcmpmu_dbg_rgltr_set_mode(struct file *file,
 	}
 	pr_info("%s, %u\n", consumer, mode);
 	regl = regulator_get(NULL, consumer);
-	if (unlikely(IS_ERR_OR_NULL(regl))) {
+	if (unlikely(IS_ERR(regl))) {
 		pr_info("regulator_get for %s failed\n", consumer);
 		return count;
 	}
@@ -1194,7 +1194,7 @@ static ssize_t bcmpmu_dbg_rgltr_get_mode(struct file *file,
 
 	pr_info("%s\n", consumer);
 	regl = regulator_get(NULL, consumer);
-	if (unlikely(IS_ERR_OR_NULL(regl))) {
+	if (unlikely(IS_ERR(regl))) {
 		pr_info("regulator_get for %s failed\n", consumer);
 		return count;
 	}

@@ -19,10 +19,10 @@
 #include <linux/interrupt.h>
 #include <linux/workqueue.h>
 #include <linux/mutex.h>
-#include <linux/gpio.h>
 #include <linux/moduleparam.h>
 #include <linux/uaccess.h>
 #include <mach/gpio.h>
+#include <linux/gpio.h>
 #ifdef CONFIG_DEBUG_FS
 #include <linux/debugfs.h>
 #include <linux/seq_file.h>
@@ -352,7 +352,7 @@ int bcmpmu59xxx_unregister_irq(struct bcmpmu59xxx *pmu,
 	return ret;
 }
 
-static int __devinit bcmpmu59xxx_irq_probe(struct platform_device *pdev)
+static int bcmpmu59xxx_irq_probe(struct platform_device *pdev)
 {
 	int ret = 0;
 	struct bcmpmu59xxx_irq_data *idata;
@@ -408,7 +408,7 @@ err:
 	return ret;
 }
 
-static int __devexit bcmpmu59xxx_irq_remove(struct platform_device *pdev)
+static int bcmpmu59xxx_irq_remove(struct platform_device *pdev)
 {
 	struct bcmpmu59xxx *bcmpmu =  dev_get_drvdata(pdev->dev.parent);
 	struct bcmpmu59xxx_platform_data *pdata ;
@@ -433,7 +433,7 @@ static struct platform_driver bcmpmu59xxx_irq_driver = {
 		   .name = "bcmpmu59xxx_irq",
 		   },
 	.probe = bcmpmu59xxx_irq_probe,
-	.remove = __devexit_p(bcmpmu59xxx_irq_remove),
+	.remove = bcmpmu59xxx_irq_remove,
 };
 
 static int __init bcmpmu59xxx_irq_init(void)

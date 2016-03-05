@@ -28,7 +28,7 @@
 #include <linux/mfd/bcmpmu59xxx_reg.h>
 #include <linux/broadcom/bcmpmu_audio.h>
 
-static int debug_mask = BCMPMU_PRINT_ERROR | BCMPMU_PRINT_INIT ;
+static int debug_mask = BCMPMU_PRINT_ERROR | BCMPMU_PRINT_INIT;
 module_param_named(dbgmsk, debug_mask, int, S_IRUGO | S_IWUSR | S_IWGRP);
 #define pr_audio(debug_level, args...) \
 	do { \
@@ -239,29 +239,28 @@ void bcmpmu_hs_power(bool on)
 		return;
 	bcmpmu = pmu_audio->bcmpmu;
 	pr_audio(FLOW, "%s: ON = %d\n", __func__, on);
-
 	mutex_lock(&pmu_audio->lock);
 
-	bcmpmu->read_dev(bcmpmu,PMU_REG_HSPGA3,&val3);
-	bcmpmu->read_dev(bcmpmu,PMU_REG_HSPUP1,&val1);
-	bcmpmu->read_dev(bcmpmu,PMU_REG_HSPUP2,&val2);
-
+	bcmpmu->read_dev(bcmpmu, PMU_REG_HSPGA3, &val3);
+	bcmpmu->read_dev(bcmpmu, PMU_REG_HSPUP1, &val1);
+	bcmpmu->read_dev(bcmpmu, PMU_REG_HSPUP2, &val2);
 	if (on) {
-		val1 &= ~HSPUP1_IDDQ_PWRDN_MASK;  /*HSPUP1*/
-		val2 |= 1 << HSPUP2_HS_PWRUP_SHIFT;     /*HSPUP2*/
-		val3 |= HSPGA3_PGA_RAMPDIS;	/*HSPGA3*/
-		pmu_audio->HS_On = true;
+		val1 &= ~HSPUP1_IDDQ_PWRDN;
+		val2 |= HSPUP2_HS_PWRUP;
+		val3 |= HSPGA3_RAMUP_DIS;
 	} else {
-		val1 |= HSPUP1_IDDQ_PWRDN_MASK;  /*HSPUP1*/
-		val2 &= ~(1 << HSPUP2_HS_PWRUP_SHIFT);     /*HSPUP2*/
-		val3 &= ~HSPGA3_PGA_RAMPDIS;	/*HSPGA3*/
-		pmu_audio->HS_On = false;
+		val1 |= HSPUP1_IDDQ_PWRDN;
+		val2 &= ~(1 << HSPUP2_HS_PWRUP_SHIFT);
+		val3 &= ~HSPGA3_RAMUP_DIS;
 	}
+	pmu_audio->HS_On = on;
+	bcmpmu->write_dev(bcmpmu, PMU_REG_HSPGA3, val3);
+	bcmpmu->write_dev(bcmpmu, PMU_REG_HSPUP1, val1);
+	bcmpmu->write_dev(bcmpmu, PMU_REG_HSPUP2, val2);
 
-	bcmpmu->write_dev(bcmpmu,PMU_REG_HSPGA3,val3);
-	bcmpmu->write_dev(bcmpmu,PMU_REG_HSPUP1,val1);
-	bcmpmu->write_dev(bcmpmu,PMU_REG_HSPUP2,val2);
-
+	bcmpmu->read_dev(bcmpmu, PMU_REG_HSPGA3, &val3);
+	pr_audio(FLOW, "%s: PMU_REG_HSPGA3 %x\n",
+			__func__, val3);
 	mutex_unlock(&pmu_audio->lock);
 }
 EXPORT_SYMBOL(bcmpmu_hs_power);
@@ -310,7 +309,7 @@ int bcmpmu_hs_set_input_mode(int HSgain, int HSInputmode)
 	}
 
 	bcmpmu->read_dev(bcmpmu, PMU_REG_HSPGA1, (u8 *)&data1);
-	bcmpmu->read_dev(bcmpmu, PMU_REG_HSPGA2, (u8 *)&data2);
+	bcmpmu->read_dev(bcmpmu, PMU_REG_HSPGA1, (u8 *)&data2);
 	bcmpmu->read_dev(bcmpmu, PMU_REG_HSPGA3, (u8 *)&data3);
 	if (HSInputmode == PMU_HS_SINGLE_ENDED_AC_COUPLED) {
 
@@ -385,9 +384,9 @@ int bcmpmu_hs_set_input_mode(int HSgain, int HSInputmode)
 	/* Power Up HS */
 	if (HSwasEn) {
 		pmu_audio->HS_On = true;
-		bcmpmu->read_dev(bcmpmu, PMU_REG_HSPUP2, (u8 *)&data2);
-		data2 |= 1 << HSPUP2_HS_PWRUP_SHIFT;
-		bcmpmu->write_dev(bcmpmu, PMU_REG_HSPUP2, (u8)data2);
+		bcmpmu->read_dev(bcmpmu, PMU_REG_HSPUP2, (u8 *)&data1);
+		data1 |= 1 << HSPUP2_HS_PWRUP_SHIFT;
+		bcmpmu->write_dev(bcmpmu, PMU_REG_HSPUP2, (u8)data1);
 	}
 	mutex_unlock(&pmu_audio->lock);
 
@@ -429,7 +428,6 @@ static void bcmpmu_ihf_manual_power(bool on)
 	mutex_lock(&pmu_audio->lock);
 	if (on) {
 		if (pmu_audio->IHF_On) {
-			printk(KERN_INFO "%s: IHF is already on.\n", __func__);
 			mutex_unlock(&pmu_audio->lock);
 			return;
 		}
@@ -462,7 +460,6 @@ static void bcmpmu_ihf_manual_power(bool on)
 		bcmpmu->read_dev(bcmpmu, PMU_REG_IHFRAMP, &temp);
 		temp |= IHFRAMP_PUP;
 		bcmpmu->write_dev(bcmpmu, PMU_REG_IHFRAMP, temp);
-
 		/* Enable  IHF LOOP FILTER pup */
 		bcmpmu->read_dev(bcmpmu, PMU_REG_IHFLF, &temp);
 		temp |= IHFLF_PUP;
@@ -502,7 +499,6 @@ static void bcmpmu_ihf_manual_power(bool on)
 		bcmpmu->read_dev(bcmpmu, PMU_REG_IHFPOP, &temp);
 		temp |= IHFPOP_EN;
 		bcmpmu->write_dev(bcmpmu, PMU_REG_IHFPOP, temp);
-
 		/* wait for 0.6ms */
 		usleep_range(600, 1200);
 		/* Enable  IHF POP pup */
@@ -512,7 +508,7 @@ static void bcmpmu_ihf_manual_power(bool on)
 
 		/* wait for 2ms */
 		usleep_range(2000, 4000);
-		/* Disable  IHF Driver Clamp */
+		/* Enable  IHF RAMP pup Disable  IHF Driver Clamp */
 		bcmpmu->read_dev(bcmpmu, PMU_REG_IHFRAMP, &temp);
 		temp |= (IHFRAMP_DRVCLAMP_DIS |
 			 IHFRAMP_IHFCAL_SEL);
@@ -618,6 +614,116 @@ static void bcmpmu_ihf_manual_power(bool on)
 	mutex_unlock(&pmu_audio->lock);
 }
 
+void bcmpmu_enable_alc(bool on)
+{
+	struct bcmpmu59xxx *bcmpmu;
+	u8 reg;
+	if (!pmu_audio)
+		return;
+	bcmpmu = pmu_audio->bcmpmu;
+	pr_audio(FLOW, "%s: ON = %d\n", __func__, on);
+	mutex_lock(&pmu_audio->lock);
+	bcmpmu->read_dev(bcmpmu, PMU_REG_IHFALC1, &reg);
+	if (on) {
+		reg |= IHF_ALC_PUP_MASK;
+		reg &= ~IHFALC1_IHFALC_BYP;
+	} else {
+		reg &= ~IHF_ALC_PUP_MASK;
+		reg |=  IHFALC1_IHFALC_BYP;
+	}
+	bcmpmu->write_dev(bcmpmu, PMU_REG_IHFALC1, reg);
+	mutex_unlock(&pmu_audio->lock);
+}
+EXPORT_SYMBOL(bcmpmu_enable_alc);
+
+void bcmpmu_ihf_alc_vbat_ref(bool on)
+{
+	struct bcmpmu59xxx *bcmpmu;
+	u8 reg;
+	if (!pmu_audio)
+		return;
+	bcmpmu = pmu_audio->bcmpmu;
+	pr_audio(FLOW, "%s: ON = %d\n", __func__, on);
+	mutex_lock(&pmu_audio->lock);
+	bcmpmu->read_dev(bcmpmu, PMU_REG_IHFALC1, &reg);
+	if (on)
+		reg |= IHF_ALC_VBAT_REF_MASK;
+	else
+		reg &= ~IHF_ALC_VBAT_REF_MASK;
+	bcmpmu->write_dev(bcmpmu, PMU_REG_IHFALC1, reg);
+	mutex_unlock(&pmu_audio->lock);
+}
+EXPORT_SYMBOL(bcmpmu_ihf_alc_vbat_ref);
+
+void bcmpmu_ihf_alc_thld(enum ihf_alc_thld alc_thld)
+{
+	struct bcmpmu59xxx *bcmpmu;
+	u8 reg;
+	if (!pmu_audio)
+		return;
+	bcmpmu = pmu_audio->bcmpmu;
+	pr_audio(FLOW, "%s: param %d\n", __func__, alc_thld);
+	if ((alc_thld << IHFALC2_THLD_SHIFT) >
+		IHFALC2_THLD_MASK) {
+		pr_audio(ERROR, "%s: Invalid param %d\n",
+			__func__, alc_thld);
+	} else {
+		mutex_lock(&pmu_audio->lock);
+		bcmpmu->read_dev(bcmpmu, PMU_REG_IHFALC2, &reg);
+		reg &= ~IHFALC2_THLD_MASK;
+		reg |= (alc_thld << IHFALC2_THLD_SHIFT);
+		bcmpmu->write_dev(bcmpmu, PMU_REG_IHFALC2, reg);
+		mutex_unlock(&pmu_audio->lock);
+	}
+}
+EXPORT_SYMBOL(bcmpmu_ihf_alc_thld);
+
+void bcmpmu_ihf_alc_rampup_ctrl(enum ihf_alc_ramp_up_ctrl ctrl)
+{
+	struct bcmpmu59xxx *bcmpmu;
+	u8 reg;
+	if (!pmu_audio)
+		return;
+	bcmpmu = pmu_audio->bcmpmu;
+	pr_audio(FLOW, "%s: param %d\n", __func__, ctrl);
+	if ((ctrl << IHFALC2_RAMP_UP_CTRL_SHIFT) >
+		IHFALC2_RAMP_UP_CTRL_MASK) {
+		pr_audio(ERROR, "%s: param %d\n",
+				__func__, ctrl);
+	} else {
+		mutex_lock(&pmu_audio->lock);
+		bcmpmu->read_dev(bcmpmu, PMU_REG_IHFALC2, &reg);
+		reg &= ~IHFALC2_RAMP_UP_CTRL_MASK;
+		reg |= (ctrl << IHFALC2_RAMP_UP_CTRL_SHIFT);
+		bcmpmu->write_dev(bcmpmu, PMU_REG_IHFALC2, reg);
+		mutex_unlock(&pmu_audio->lock);
+	}
+}
+EXPORT_SYMBOL(bcmpmu_ihf_alc_rampup_ctrl);
+
+void bcmpmu_ihf_alc_ramp_down_ctrl(enum ihf_alc_ramp_down_ctrl ctrl)
+{
+	struct bcmpmu59xxx *bcmpmu;
+	u8 reg;
+	if (!pmu_audio)
+		return;
+	bcmpmu = pmu_audio->bcmpmu;
+	pr_audio(FLOW, "%s: param %d\n", __func__, ctrl);
+	if ((ctrl << IHFALC2_RAMP_DOWN_CTRL_SHIFT) >
+		IHFALC2_RAMP_DOWN_CTRL_MASK) {
+		pr_audio(ERROR, "%s: Invalid param %d\n",
+			__func__, ctrl);
+	} else {
+		mutex_lock(&pmu_audio->lock);
+		bcmpmu->read_dev(bcmpmu, PMU_REG_IHFALC2, &reg);
+		reg &= ~IHFALC2_RAMP_DOWN_CTRL_MASK;
+		reg |= (ctrl << IHFALC2_RAMP_DOWN_CTRL_SHIFT);
+		bcmpmu->write_dev(bcmpmu, PMU_REG_IHFALC2, reg);
+		mutex_unlock(&pmu_audio->lock);
+	}
+}
+EXPORT_SYMBOL(bcmpmu_ihf_alc_ramp_down_ctrl);
+
 /* callee of this API need to put 65ms delay to
  * make sure power up seq done properly by h/w
  * if ihf_autoseq_dis is not set
@@ -630,6 +736,7 @@ void bcmpmu_ihf_power(bool on)
 		return;
 	bcmpmu = pmu_audio->bcmpmu;
 	pr_audio(FLOW, "%s: ON = %d\n", __func__, on);
+
 	if (pmu_audio->ihf_autoseq_dis) {
 		bcmpmu_ihf_manual_power(on);
 		return;
@@ -637,7 +744,6 @@ void bcmpmu_ihf_power(bool on)
 	mutex_lock(&pmu_audio->lock);
 	if (on) {
 		if (pmu_audio->IHF_On) {
-			printk(KERN_INFO "%s: IHF is already on.\n", __func__);
 			mutex_unlock(&pmu_audio->lock);
 			return;
 		}
@@ -646,19 +752,14 @@ void bcmpmu_ihf_power(bool on)
 		/* Enable auto sequence for IHF power up and power down */
 		bcmpmu->read_dev(bcmpmu, PMU_REG_IHFPOP, &temp);
 		temp |= IHFAUTO_SEQ;
+		temp &= ~IHFPOP_BYPASS;
 		bcmpmu->write_dev(bcmpmu, PMU_REG_IHFPOP, temp);
-
-		/* Disable IHF Noise Gate pup */
-		bcmpmu->read_dev(bcmpmu, PMU_REG_IHF_NGMISC, &temp);
-		temp &= ~NGMISC_IHFNG_PUP_EN_IHFNG;
-		bcmpmu->write_dev(bcmpmu, PMU_REG_IHF_NGMISC, temp);
 
 		bcmpmu->read_dev(bcmpmu, PMU_REG_IHFLDO, &temp);
 		temp |= IHFLDO_PUP;
 		bcmpmu->write_dev(bcmpmu, PMU_REG_IHFLDO, temp);
 	} else {
 		if (!pmu_audio->IHF_On) {
-			printk(KERN_INFO "%s: IHF is already off.\n", __func__);
 			mutex_unlock(&pmu_audio->lock);
 			return;
 		}
@@ -667,9 +768,9 @@ void bcmpmu_ihf_power(bool on)
 		/* Bypass IHF ALC/APS, so that IHF gain can be
 		 * controlled manually
 		 */
-		/*bcmpmu->read_dev(bcmpmu, PMU_REG_IHFALC1, &temp);
+		bcmpmu->read_dev(bcmpmu, PMU_REG_IHFALC1, &temp);
 		temp |= IHFALC1_IHFALC_BYP;
-		bcmpmu->write_dev(bcmpmu, PMU_REG_IHFALC1, temp);*/
+		bcmpmu->write_dev(bcmpmu, PMU_REG_IHFALC1, temp);
 
 		/* Toggle i_IHFpop_pup from 1 to 0. */
 		bcmpmu->read_dev(bcmpmu, PMU_REG_IHFPOP, &temp);
@@ -688,9 +789,9 @@ void bcmpmu_ihf_power(bool on)
 		bcmpmu->read_dev(bcmpmu, PMU_REG_IHFPOP, &temp);
 		temp &= ~IHFAUTO_SEQ;
 		bcmpmu->write_dev(bcmpmu, PMU_REG_IHFPOP, temp);
-
 	}
 	mutex_unlock(&pmu_audio->lock);
+
 }
 EXPORT_SYMBOL(bcmpmu_ihf_power);
 
@@ -713,8 +814,8 @@ void bcmpmu_ihf_bypass_en(bool enable)
 	mutex_unlock(&pmu_audio->lock);
 }
 EXPORT_SYMBOL(bcmpmu_ihf_bypass_en);
-*/
 
+*/
 void bcmpmu_ihf_set_gain(bcmpmu_ihf_gain_t gain)
 {
 	struct gain_ramp ramp = {
@@ -850,8 +951,8 @@ void bcmpmu_audio_hs_selftest_backup(bool Enable)
 					     PMU_REG_HSPUP2, StoredRegValue[6]);
 	}
 }
-#endif
 
+#endif
 void bcmpmu_audio_init(void)
 {
 	u8 val;
@@ -909,16 +1010,12 @@ void bcmpmu_audio_init(void)
 		bcmpmu->read_dev(bcmpmu, PMU_REG_IHF_NGMISC, &val);
 		val &= ~NGMISC_IHFNG_PUP_EN_IHFNG;
 		bcmpmu->write_dev(bcmpmu, PMU_REG_IHF_NGMISC, val);
-
 		/* Set IHF noise threshold */
-		/*bcmpmu->read_dev(bcmpmu, PMU_REG_IHF_NGTHRESH, &val);
-		val &= ~IHF_NGTHRESH_THLD_MASK;
-		val |= (0x2 << IHF_NGTHRESH_THLD_SHIFT);
-		bcmpmu->write_dev(bcmpmu, PMU_REG_IHF_NGTHRESH, val);*/
 		bcmpmu->read_dev(bcmpmu, PMU_REG_IHF_NGTHRESH, &val);
 		val &= ~IHF_NGTHRESH_THLD_MASK;
 		val |= (0x0 << IHF_NGTHRESH_THLD_SHIFT);
 		bcmpmu->write_dev(bcmpmu, PMU_REG_IHF_NGTHRESH, val);
+
 	}
 	mutex_unlock(&pmu_audio->lock);
 }
@@ -1029,7 +1126,7 @@ static int audio_ihf_on(void *data, u64 val)
 DEFINE_SIMPLE_ATTRIBUTE(dbg_ihf_on, NULL, audio_ihf_on, "%llu\n");
 #endif
 
-static int __devinit bcmpmu_audio_probe(struct platform_device *pdev)
+static int bcmpmu_audio_probe(struct platform_device *pdev)
 {
 	struct bcmpmu59xxx *bcmpmu = dev_get_drvdata(pdev->dev.parent);
 	struct bcmpmu_audio *audio_data;
@@ -1120,7 +1217,7 @@ err:
 	return 0;
 }
 
-static int __devexit bcmpmu_audio_remove(struct platform_device *pdev)
+static int bcmpmu_audio_remove(struct platform_device *pdev)
 {
 #ifdef CONFIG_DEBUG_FS
 	debugfs_remove(pmu_audio->debugfs_dir);
@@ -1134,7 +1231,7 @@ static struct platform_driver bcmpmu_audio_driver = {
 		.name = "bcmpmu_audio",
 	},
 	.probe = bcmpmu_audio_probe,
-	.remove = __devexit_p(bcmpmu_audio_remove),
+	.remove = bcmpmu_audio_remove,
 };
 
 static int __init bcmpmu_audio_drv_init(void)
