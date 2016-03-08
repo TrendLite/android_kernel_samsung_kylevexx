@@ -1321,7 +1321,7 @@ struct spa_power_data spa_data = {
 #if defined(CONFIG_SPA_SUPPLEMENTARY_CHARGING)
 	.eoc_current = 150,
 	.backcharging_time = 45, //mins
-	.recharging_eoc = 40,
+	.recharging_eoc = 90,
 #else
 	.eoc_current = 100,
 #endif
