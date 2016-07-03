@@ -231,6 +231,7 @@ void create_io_context_slowpath(struct task_struct *task, gfp_t gfp_flags,
 	/* initialize */
 	atomic_long_set(&ioc->refcount, 1);
 	atomic_set(&ioc->nr_tasks, 1);
+	atomic_set(&ioc->nr_tasks, 1);
 	spin_lock_init(&ioc->lock);
 	INIT_RADIX_TREE(&ioc->icq_tree, GFP_ATOMIC | __GFP_HIGH);
 	INIT_HLIST_HEAD(&ioc->icq_list);
