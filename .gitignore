@@ -1,0 +1,7 @@
+*.patch
+*.*~
+.*~
+*~
+*.orig
+*.rej
+kernel_out/
