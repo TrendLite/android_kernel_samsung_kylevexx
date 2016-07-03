@@ -8,24 +8,24 @@ options=("$blue KYLEVE $default" "$green KYLEVESS $default" "$red CLEAN $default
 select opt in "${options[@]}"
 do
     case $opt in
-        "KYLEVE")
-$blue
+        "$blue KYLEVE $default")
+tput setaf 4
 make -j4 bcm21664_hawaii_ss_kyleve_rev00_defconfig
-$default
+tput sgr0
 make -j4
 exit
             ;;
-        "KYLEVESS " )
-$green
+        "$green KYLEVESS $default " )
+tput setaf 2
 make -j4 bcm21664_hawaii_ss_kylevess_rev00_defconfig
-$default
+tput sgr0
 make -j4
 exit
             ;;
-        "CLEAN")
-$red
-make -j4 clean
-$default
+        "$red CLEAN $default")
+tput setaf 1
+make -j4 mrproper
+tput sgr0
 exit
             break
             ;;
