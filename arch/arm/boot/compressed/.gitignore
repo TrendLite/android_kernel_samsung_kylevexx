@@ -6,11 +6,11 @@ hyp-stub.S
 piggy_data
 vmlinux
 vmlinux.lds
-*.lz4
-*.xz
-*.gzip
-*.lzo
-*.lzma
+*.lz4kern
+*.xzkern
+*.gzipkern
+*.lzokern
+*.lzmakern
 # borrowed libfdt files
 fdt.c
 fdt.h
