@@ -2555,6 +2555,16 @@ bool intel_sdvo_init(struct drm_device *dev, int sdvo_reg)
 		goto err;
 	}
 
+	/* Only enable the hotplug irq if we need it, to work around noisy
+	 * hotplug lines.
+	 */
+	if (intel_sdvo->hotplug_active[0]) {
+		if (intel_sdvo->is_sdvob)
+			dev_priv->hotplug_supported_mask |= SDVOB_HOTPLUG_INT_STATUS;
+		else
+			dev_priv->hotplug_supported_mask |= SDVOC_HOTPLUG_INT_STATUS;
+	}
+
 	intel_sdvo_select_ddc_bus(dev_priv, intel_sdvo, sdvo_reg);
 
 	/* Set the input timing to the screen. Assume always input 0. */

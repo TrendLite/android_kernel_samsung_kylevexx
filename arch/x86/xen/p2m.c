@@ -194,6 +194,13 @@ RESERVE_BRK(p2m_mid_mfn, PAGE_SIZE * (MAX_DOMAIN_PAGES / (P2M_PER_PAGE * P2M_MID
  * boundary violation will require three middle nodes. */
 RESERVE_BRK(p2m_mid_identity, PAGE_SIZE * 2 * 3);
 
+/* When we populate back during bootup, the amount of pages can vary. The
+ * max we have is seen is 395979, but that does not mean it can't be more.
+ * Some machines can have 3GB I/O holes even. With early_can_reuse_p2m_middle
+ * it can re-use Xen provided mfn_list array, so we only need to allocate at
+ * most three P2M top nodes. */
+RESERVE_BRK(p2m_populated, PAGE_SIZE * 3);
+
 static inline unsigned p2m_top_index(unsigned long pfn)
 {
 	BUG_ON(pfn >= MAX_P2M_PFN);
@@ -713,9 +720,6 @@ int m2p_add_override(unsigned long mfn, struct page *page,
 
 			xen_mc_issue(PARAVIRT_LAZY_MMU);
 		}
-		/* let's use dev_bus_addr to record the old mfn instead */
-		kmap_op->dev_bus_addr = page->index;
-		page->index = (unsigned long) kmap_op;
 	}
 	spin_lock_irqsave(&m2p_override_lock, flags);
 	list_add(&page->lru,  &m2p_overrides[mfn_hash(mfn)]);
@@ -724,7 +728,8 @@ int m2p_add_override(unsigned long mfn, struct page *page,
 	return 0;
 }
 EXPORT_SYMBOL_GPL(m2p_add_override);
-int m2p_remove_override(struct page *page, bool clear_pte)
+int m2p_remove_override(struct page *page,
+		struct gnttab_map_grant_ref *kmap_op)
 {
 	unsigned long flags;
 	unsigned long mfn;
@@ -753,10 +758,8 @@ int m2p_remove_override(struct page *page, bool clear_pte)
 	WARN_ON(!PagePrivate(page));
 	ClearPagePrivate(page);
 
-	if (clear_pte) {
-		struct gnttab_map_grant_ref *map_op =
-			(struct gnttab_map_grant_ref *) page->index;
-		set_phys_to_machine(pfn, map_op->dev_bus_addr);
+	set_phys_to_machine(pfn, page->index);
+	if (kmap_op != NULL) {
 		if (!PageHighMem(page)) {
 			struct multicall_space mcs;
 			struct gnttab_unmap_grant_ref *unmap_op;
@@ -768,13 +771,13 @@ int m2p_remove_override(struct page *page, bool clear_pte)
 			 * issued. In this case handle is going to -1 because
 			 * it hasn't been modified yet.
 			 */
-			if (map_op->handle == -1)
+			if (kmap_op->handle == -1)
 				xen_mc_flush();
 			/*
-			 * Now if map_op->handle is negative it means that the
+			 * Now if kmap_op->handle is negative it means that the
 			 * hypercall actually returned an error.
 			 */
-			if (map_op->handle == GNTST_general_error) {
+			if (kmap_op->handle == GNTST_general_error) {
 				printk(KERN_WARNING "m2p_remove_override: "
 						"pfn %lx mfn %lx, failed to modify kernel mappings",
 						pfn, mfn);
@@ -784,8 +787,8 @@ int m2p_remove_override(struct page *page, bool clear_pte)
 			mcs = xen_mc_entry(
 					sizeof(struct gnttab_unmap_grant_ref));
 			unmap_op = mcs.args;
-			unmap_op->host_addr = map_op->host_addr;
-			unmap_op->handle = map_op->handle;
+			unmap_op->host_addr = kmap_op->host_addr;
+			unmap_op->handle = kmap_op->handle;
 			unmap_op->dev_bus_addr = 0;
 
 			MULTI_grant_table_op(mcs.mc,
@@ -796,10 +799,9 @@ int m2p_remove_override(struct page *page, bool clear_pte)
 			set_pte_at(&init_mm, address, ptep,
 					pfn_pte(pfn, PAGE_KERNEL));
 			__flush_tlb_single(address);
-			map_op->host_addr = 0;
+			kmap_op->host_addr = 0;
 		}
-	} else
-		set_phys_to_machine(pfn, page->index);
+	}
 
 	return 0;
 }

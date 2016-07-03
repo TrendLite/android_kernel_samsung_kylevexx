@@ -144,7 +144,6 @@ static void tick_nohz_update_jiffies(ktime_t now)
 	local_irq_save(flags);
 	tick_do_update_jiffies64(now);
 	local_irq_restore(flags);
-
 	touch_softlockup_watchdog();
 }
 

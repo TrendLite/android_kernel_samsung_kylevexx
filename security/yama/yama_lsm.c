@@ -299,12 +299,9 @@ static int yama_ptrace_traceme(struct task_struct *parent)
 	}
 
 	if (rc) {
-		char name[sizeof(current->comm)];
 		printk_ratelimited(KERN_NOTICE
 			"ptraceme of pid %d was attempted by: %s (pid %d)\n",
-			current->pid,
-			get_task_comm(name, parent),
-			parent->pid);
+			current->pid, parent->comm, parent->pid);
 	}
 
 	return rc;
