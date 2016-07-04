@@ -16,6 +16,11 @@ do
 mkdir tmp
 cd tmp
 cp -f ../arch/arm/boot/zImage ./zImage
+if [ "$?" -ne "0" ]; then
+  echo "$red ERROR : $default $blue You should compile kernel first $default"
+rm -rf tmp
+  exit 1
+fi
 cp ../arch/arm/tools/boot.img-ramdisk-kyleve ./boot.img-ramdisk.cpio.gz
 cp ../arch/arm/tools/mkbootimg ./mkbootimg
 chmod 775 mkbootimg
@@ -37,6 +42,11 @@ rm -rf tmp
 mkdir tmp
 cd tmp
 cp -f ../arch/arm/boot/zImage ./zImage
+if [ "$?" -ne "0" ]; then
+  echo "$red ERROR : $default $blue You should compile kernel first $default"
+rm -rf tmp
+  exit 1
+fi
 cp ../arch/arm/tools/boot.img-ramdisk-kylevess ./boot.img-ramdisk.cpio.gz
 cp ../arch/arm/tools/mkbootimg ./mkbootimg
 chmod 775 mkbootimg
@@ -80,6 +90,11 @@ do
 mkdir tmp
 cd tmp
 cp ../boot.img boot.img
+if [ "$?" -ne "0" ]; then
+  echo "$red ERROR : $default $blue You should compile kernel and make boot.img $default"
+rm -rf tmp
+  exit 1
+fi
 cp ../arch/arm/tools/META-INF_kyleve ./META-INF.zip
 unzip META-INF.zip
 rm META-INF.zip
@@ -107,6 +122,11 @@ exit
 mkdir tmp
 cd tmp
 cp ../boot.img boot.img
+if [ "$?" -ne "0" ]; then
+  echo "$red ERROR : $default $blue You should compile kernel and make boot.img $default"
+rm -rf tmp
+  exit 1
+fi
 cp ../arch/arm/tools/META-INF_kylevess ./META-INF.zip
 unzip META-INF.zip
 rm META-INF.zip
@@ -143,28 +163,28 @@ done
 }
 function default_menu
 {
-options=("$blue KYLEVE $default" "$green KYLEVESS $default" "$red CLEAN $default" "MAKE BOOT" "MAKE FLASHABLE ZIP" "QUIT")
+options=("KYLEVE" "KYLEVESS" "CLEAN" "MAKE BOOT" "MAKE FLASHABLE ZIP" "QUIT")
 select opt in "${options[@]}"
 do
     case $opt in
-        "$blue KYLEVE $default")
+        " KYLEVE ")
 tput setaf 4
 make -j4 bcm21664_hawaii_ss_kyleve_rev00_defconfig
 tput sgr0
 make -j4
 exit
             ;;
-        "$green KYLEVESS $default" )
+        "KYLEVESS" )
 tput setaf 2
 make -j4 bcm21664_hawaii_ss_kylevess_rev00_defconfig
 tput sgr0
 make -j4
 exit
             ;;
-        "$red CLEAN $default")
+        "CLEAN")
 tput setaf 1
 make -j4 mrproper
-echo -e "$blue Made clean $default"
+echo -e "Made clean"
 tput sgr0
 clear
 clear
