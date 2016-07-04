@@ -6,77 +6,56 @@ default=`tput sgr0`
 PS3='Please enter your choice: '
 function boot
 {
-HEIGHT=15
-WIDTH=40
-CHOICE_HEIGHT=4
-BACKTITLE="Boot.img"
-TITLE="COMPILE BOOT.IMG FOR ? :-"
-MENU="Choose one of the following options:"
-
-OPTIONS=(1 "KYLEVE"
-         2 "KYLEVESS"
-         3 "QUIT")
-
-CHOICE=$(dialog --clear \
-                --backtitle "$BACKTITLE" \
-                --title "$TITLE" \
-                --menu "$MENU" \
-                $HEIGHT $WIDTH $CHOICE_HEIGHT \
-                "${OPTIONS[@]}" \
-                2>&1 >/dev/tty)
-
 clear
-case $CHOICE in
-        1)
-            echo "You chose Option 1"
+PS3='Please enter your choice: '
+options=("KYLEVE" "KYLEVESS" "GO BACK" "Quit")
+select opt in "${options[@]}"
+do
+    case $opt in
+        "Option 1")
+            echo "you chose choice 1"
             ;;
-        2)
-            echo "You chose Option 2"
+        "Option 2")
+            echo "you chose choice 2"
             ;;
-        3)
-            echo "You chose Option 3"
+        "Option 3")
+            echo "you chose choice 3"
             ;;
-
-esac
+        "Quit")
+            break
+            ;;
+        *) echo invalid option;;
+    esac
+done
 }
 
 function make_zip
 {
-HEIGHT=15
-WIDTH=40
-CHOICE_HEIGHT=4
-BACKTITLE="ZIP"
-TITLE="MAKE FLASHABLE ZIP FOR ? :-"
-MENU="Choose one of the following options:"
-
-OPTIONS=(1 "KYLEVE"
-         2 "KYLEVESS"
-         3 "QUIT")
-
-CHOICE=$(dialog --clear \
-                --backtitle "$BACKTITLE" \
-                --title "$TITLE" \
-                --menu "$MENU" \
-                $HEIGHT $WIDTH $CHOICE_HEIGHT \
-                "${OPTIONS[@]}" \
-                2>&1 >/dev/tty)
-
 clear
-case $CHOICE in
-        1)
-            echo "You chose Option 1"
+PS3='Please enter your choice: '
+options=("KYLEVE" "KYLEVE" "GO BACK" "Quit")
+select opt in "${options[@]}"
+do
+    case $opt in
+        "KYLEVE")
+            echo "you chose choice 1"
             ;;
-        2)
-            echo "You chose Option 2"
+        "KYLEVE")
+            echo "you chose choice 2"
             ;;
-        3)
-            echo "You chose Option 3"
+        "GO BACK")
+            default_menu
             ;;
-
-esac
+        "Quit")
+            break
+            ;;
+        *) echo invalid option;;
+    esac
+done
 }
-
-options=("$blue KYLEVE $default" "$green KYLEVESS $default" "$red CLEAN $default" "MAKE BOOT" "MAKE FLASHABLE ZIP" )
+function default_menu
+{
+options=("$blue KYLEVE $default" "$green KYLEVESS $default" "$red CLEAN $default" "MAKE BOOT" "MAKE FLASHABLE ZIP" "QUIT")
 select opt in "${options[@]}"
 do
     case $opt in
@@ -110,11 +89,15 @@ exit
         "MAKE FLASHABLE ZIP")
 make_zip
 exit
+;;
+        "QUIT")
+exit
             break
             ;;
         *) echo invalid option;;
     esac
 done
-
+}
+default_menu
 
 
