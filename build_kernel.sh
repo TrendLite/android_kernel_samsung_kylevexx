@@ -12,14 +12,53 @@ options=("KYLEVE" "KYLEVESS" "GO BACK" "Quit")
 select opt in "${options[@]}"
 do
     case $opt in
-        "Option 1")
-            echo "you chose choice 1"
+        "KYLEVE")
+mkdir tmp
+cd tmp
+cp -f ../arch/arm/boot/zImage ./zImage
+cp ../arch/arm/tools/boot.img-ramdisk-kyleve ./boot.img-ramdisk.cpio.gz
+cp ../arch/arm/tools/mkbootimg ./mkbootimg
+chmod 775 mkbootimg
+echo "Creating boot.img"
+./mkbootimg --kernel zImage --ramdisk boot.img-ramdisk.cpio.gz --board kyleve --pagesize 4096 --base 0x82000000 -o boot.img
+cd ..
+mv -f tmp/boot.img boot.img
+if [ "$?" -ne "0" ]; then
+  echo "$red ERROR : $default $blue Failed to make boot.img $default"
+rm -rf tmp
+  exit 1
+fi
+
+echo "$red boot.img is ready at :$default $blue $(pwd)/boot.img $default "
+rm -rf tmp
+
             ;;
-        "Option 2")
-            echo "you chose choice 2"
+        "KYLEVESS")
+mkdir tmp
+cd tmp
+cp -f ../arch/arm/boot/zImage ./zImage
+cp ../arch/arm/tools/boot.img-ramdisk-kylevess ./boot.img-ramdisk.cpio.gz
+cp ../arch/arm/tools/mkbootimg ./mkbootimg
+chmod 775 mkbootimg
+echo "Creating boot.img"
+./mkbootimg --kernel zImage --ramdisk boot.img-ramdisk.cpio.gz --board kyleve --pagesize 4096 --base 0x82000000 -o boot.img
+cd ..
+mv -f tmp/boot.img boot.img
+if [ "$?" -ne "0" ]; then
+  echo "$red ERROR : $default $blue Failed to make boot.img $default"
+rm -rf tmp
+  exit 1
+fi
+
+echo "$red boot.img is ready at :$default $blue $(pwd)/boot.img $default "
+rm -rf tmp
+
+
+
             ;;
-        "Option 3")
-            echo "you chose choice 3"
+        "GO BACK")
+default_menu
+clear
             ;;
         "Quit")
             break
@@ -44,7 +83,8 @@ do
             echo "you chose choice 2"
             ;;
         "GO BACK")
-            default_menu
+default_menu
+clear
             ;;
         "Quit")
             break
