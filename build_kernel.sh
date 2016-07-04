@@ -72,15 +72,63 @@ function make_zip
 {
 clear
 PS3='Please enter your choice: '
-options=("KYLEVE" "KYLEVE" "GO BACK" "Quit")
+options=("KYLEVE" "KYLEVESS" "GO BACK" "Quit")
 select opt in "${options[@]}"
 do
     case $opt in
         "KYLEVE")
-            echo "you chose choice 1"
+mkdir tmp
+cd tmp
+cp ../boot.img boot.img
+cp ../arch/arm/tools/META-INF_kyleve ./META-INF.zip
+unzip META-INF.zip
+rm META-INF.zip
+mkdir system
+mkdir system/lib
+mkdir system/lib/modules
+cd ../
+rsync -r `find -type f -name "*.ko" ` tmp/system/lib/modules/
+cd tmp
+cp ../boot.img boot.img
+zip -r tmp META-INF boot.img system
+cd .. 
+mv -f tmp/tmp.zip kernel-$(date +%Y%m%d)-3.5.7-UNOFFICIAL-kyleve.zip
+if [ "$?" -ne "0" ]; then
+  echo "$red ERROR : $default $blue Failed copy zip  $default"
+rm -rf tmp
+  exit 1
+fi
+echo "$red Flashable zip is ready   :$default $blue $(pwd)/kernel-$(date +%Y%m%d)-3.5.7-UNOFFICIAL-kyleve.zip $default "
+
+rm -rf tmp
+exit
             ;;
-        "KYLEVE")
-            echo "you chose choice 2"
+        "KYLEVESS")
+mkdir tmp
+cd tmp
+cp ../boot.img boot.img
+cp ../arch/arm/tools/META-INF_kylevess ./META-INF.zip
+unzip META-INF.zip
+rm META-INF.zip
+mkdir system
+mkdir system/lib
+mkdir system/lib/modules
+cd ../
+rsync -r `find -type f -name "*.ko" ` tmp/system/lib/modules/
+cd tmp
+cp ../boot.img boot.img
+zip -r tmp META-INF boot.img system
+cd .. 
+mv -f tmp/tmp.zip kernel-$(date +%Y%m%d)-3.5.7-UNOFFICIAL-kylevess.zip
+if [ "$?" -ne "0" ]; then
+  echo "$red ERROR : $default $blue Failed copy zip  $default"
+rm -rf tmp
+  exit 1
+fi
+echo "$red Flashable zip is ready   :$default $blue $(pwd)/kernel-$(date +%Y%m%d)-3.5.7-UNOFFICIAL-kylevess.zip $default "
+
+rm -rf tmp
+exit
             ;;
         "GO BACK")
 default_menu

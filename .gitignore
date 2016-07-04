@@ -119,4 +119,5 @@ all.config
 *.orig
 *.rej
 *.img
+*.zip
 kernel_out/
