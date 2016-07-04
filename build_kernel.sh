@@ -167,7 +167,7 @@ options=("KYLEVE" "KYLEVESS" "CLEAN" "MAKE BOOT" "MAKE FLASHABLE ZIP" "QUIT")
 select opt in "${options[@]}"
 do
     case $opt in
-        " KYLEVE ")
+        "KYLEVE")
 tput setaf 4
 make -j4 bcm21664_hawaii_ss_kyleve_rev00_defconfig
 tput sgr0
