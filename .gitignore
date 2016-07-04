@@ -120,4 +120,5 @@ all.config
 *.rej
 *.img
 *.zip
+tmp/
 kernel_out/
