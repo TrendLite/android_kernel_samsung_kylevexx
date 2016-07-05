@@ -64,11 +64,14 @@ config PRERESERVE_BOOTLOADER_FB
 		For this, bootloader should pass " bootloaderfb=[start address],[size]" to kernel on commandline.
 
 config FB_BRCM_LCD_EXIST_CHECK
-	bool "Enable LCD exist check code"
-	default n
+		bool "Enable LCD exist check code"
 	help
-	  Say Y here to enable LCD exist check codeconfig LDI_MDNIE_SUPPORT
-	tristate "LDI mDNIe Driver"
+	  Say Y here to enable LCD exist check code
+
+config LDI_MDNIE_SUPPORT
+	  tristate "LDI mDNIe Driver"
+	help
+		LDI mDNIe Driver
 	depends on y
 	default n
 	help

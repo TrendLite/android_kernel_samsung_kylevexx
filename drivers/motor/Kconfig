@@ -35,8 +35,9 @@ config DRV2603_VIBRATOR
 	depends on I2C
 	help
 	  Say Y to enalbe the DRV2603 IC.
+	  
 config BCM_SS_VIBRA
-	tristate "Simple common motor"
+	bool "Simple common motor"
 	default n
 	help
 	  Say Y to enalbe simple normal motor functionality(not haptic)

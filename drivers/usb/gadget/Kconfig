@@ -1104,7 +1104,8 @@ config USB_G_WEBCAM
 endchoice
 
 config USB_MTP_SAMSUNG
-	bool " Enable samsung mtp"
+	bool "Enable samsung mtp"
+        depends on !SEC_FACTORY
 	default n
 
 endif # USB_GADGET
