@@ -29,9 +29,7 @@
 
 #if IST30XX_INTERNAL_BIN
 #include "./Imagis/ist30xx_fw_kyle-ve.h"
-#include "./Imagis/ist30xxb_fw_kyle_ve_Ver0041.h"
-#include "./Imagis/ist30xxb_fw_kyle_ve_TopTouch_Ver0002.h"
-#include "./Imagis/ist30xxb_fw_kyle_ve_eely_Ver0001.h"
+#include "./Imagis/ist30xxb_fw_kyle_ve_Ver0033.h"
 
 const u8 *ts_fw = ist30xx_fw;
 const u8 *ts_param = ist30xx_param;
@@ -43,7 +41,6 @@ struct ist30xx_tags *ts_tags;
 
 u32 ist30xx_fw_ver = 0;
 u32 ist30xx_param_ver = 0;
-u32 g_tsp_type = 0;
 
 extern struct ist30xx_data *ts_data;
 
@@ -1260,19 +1257,9 @@ int ist30xx_check_fw(struct ist30xx_data *data, const u8 *buf)
 /* SEC - jgpark */
 int ist30xx_get_ic_fw_ver(void)
 {
-	if (g_tsp_type == TSP_TYPE_TOP) {
-		tsp_info("TSP Type : TopTouch\n");
-		return ist30xx_parse_param_ver(PARSE_FLAG_FW, ist30xxb_fw1);			
-	} else if (g_tsp_type == TSP_TYPE_EELY) {
-		tsp_info("TSP Type : EELY\n");
-		return ist30xx_parse_param_ver(PARSE_FLAG_FW, ist30xxb_fw2);	
-	} else
-	{
-		tsp_info("TSP Type : ALPS/ILJIN\n");
 	return ist30xx_parse_param_ver(PARSE_FLAG_FW, ist30xxb_fw);
-	}
-}
 
+}
 int ist30xx_force_fw_update(struct ist30xx_data *data)
 {
 	int ret = 0;
@@ -1280,28 +1267,10 @@ int ist30xx_force_fw_update(struct ist30xx_data *data)
 	bool isp_mode = false;
 
 	if (data->chip_id == IST30XXB_CHIP_ID) {
-#if IST30XX_MULTIPLE_TSP
-		if (data->tsp_type == TSP_TYPE_TOP) {
-			tsp_info("TSP Type : TopTouch\n");
-			ts_fw = (u8 *)ist30xxb_fw1;
-			ts_fw_size = sizeof(ist30xxb_fw1);
-			ts_param = (u8 *)ist30xxb_param1;
-			ts_param_size = sizeof(ist30xxb_param1);
-		} else if (data->tsp_type == TSP_TYPE_EELY) {
-			tsp_info("TSP Type : EELY\n");
-			ts_fw = (u8 *)ist30xxb_fw2;
-			ts_fw_size = sizeof(ist30xxb_fw2);
-			ts_param = (u8 *)ist30xxb_param2;
-			ts_param_size = sizeof(ist30xxb_param2);
-		} else
-#endif
-		{
-			tsp_info("TSP Type : ALPS/ILJIN\n");
 		ts_fw = (u8 *)ist30xxb_fw;
 		ts_fw_size = sizeof(ist30xxb_fw);
 		ts_param = (u8 *)ist30xxb_param;
 		ts_param_size = sizeof(ist30xxb_param);
-	}
 	}
 
 	ist30xx_get_update_info(data, ts_fw, ts_fw_size);
@@ -1348,7 +1317,7 @@ int ist30xx_check_auto_update(struct ist30xx_data *data)
 	u32 ist30xx_tsp_type = 0xFF;
 	u32 chksum;
 	bool tsp_check = false;
-#if 0
+
 	// for Multiple TSP
 	if (data->chip_id == IST30XXB_CHIP_ID) {
 		ts_fw = ist30xxb_fw;
@@ -1357,13 +1326,15 @@ int ist30xx_check_auto_update(struct ist30xx_data *data)
 		ts_fw = ist30xx_fw;
 		ts_fw_size = sizeof(ist30xx_fw);
 	}
-#endif
+
 	if (data->chip_id == IST30XXB_CHIP_ID) {
 		while (retry--) {
 			ret = ist30xx_read_cmd(data->client,
 					       CMD_GET_TSP_PANNEL_TYPE, &ist30xx_tsp_type);
 			if (ret == 0) {
-				if ((ist30xx_tsp_type == 0) || (ist30xx_tsp_type == 1) || (ist30xx_tsp_type == TSP_TYPE_ALPS) || (ist30xx_tsp_type == TSP_TYPE_EELY) || (ist30xx_tsp_type == TSP_TYPE_TOP) || (ist30xx_tsp_type == TSP_TYPE_ILJIN))
+				if ((ist30xx_tsp_type==0) || (ist30xx_tsp_type==1) ||
+                        (ist30xx_tsp_type==0x7) || (ist30xx_tsp_type==0xe) ||
+                        (ist30xx_tsp_type==0xf))
 					tsp_check = true;
                 tsp_info("tsp type: %x\n", ist30xx_tsp_type);
 				break;
@@ -1379,7 +1350,9 @@ int ist30xx_check_auto_update(struct ist30xx_data *data)
 							       CMD_GET_TSP_PANNEL_TYPE, &ist30xx_tsp_type);
 					tsp_info("tsp type: %d\n", ist30xx_tsp_type);
 					if (ret == 0) // recovery OK
-						if ((ist30xx_tsp_type == 0) || (ist30xx_tsp_type == 1) || (ist30xx_tsp_type == TSP_TYPE_ALPS) || (ist30xx_tsp_type == TSP_TYPE_EELY) || (ist30xx_tsp_type == TSP_TYPE_TOP) || (ist30xx_tsp_type == TSP_TYPE_ILJIN))
+						if ((ist30xx_tsp_type==0) || (ist30xx_tsp_type==1) ||
+                            (ist30xx_tsp_type==0x7) || (ist30xx_tsp_type==0xe) ||
+                            (ist30xx_tsp_type==0xf))
 							break;
 				}
 
@@ -1482,17 +1455,15 @@ int ist30xx_auto_bin_update(struct ist30xx_data *data)
 	int ret = 0;
 	int retry = IST30XX_FW_UPDATE_RETRY;
 	bool isp_mode = (IST30XX_ISP_MODE ? true : false);
-	g_tsp_type= data->tsp_type;
+
 	if (data->chip_id == IST30XXB_CHIP_ID) {
 #if IST30XX_MULTIPLE_TSP
 		if (data->tsp_type == TSP_TYPE_TOP) {
-			tsp_info("TSP Type : TopTouch\n");
 			ts_fw = (u8 *)ist30xxb_fw1;
 			ts_fw_size = sizeof(ist30xxb_fw1);
 			ts_param = (u8 *)ist30xxb_param1;
 			ts_param_size = sizeof(ist30xxb_param1);
 		} else if (data->tsp_type == TSP_TYPE_EELY) {
-			tsp_info("TSP Type : EELY\n");
 			ts_fw = (u8 *)ist30xxb_fw2;
 			ts_fw_size = sizeof(ist30xxb_fw2);
 			ts_param = (u8 *)ist30xxb_param2;
@@ -1500,7 +1471,6 @@ int ist30xx_auto_bin_update(struct ist30xx_data *data)
 		} else
 #endif
 		{
-			tsp_info("TSP Type : ALPS/ILJIN\n");
 		ts_fw = (u8 *)ist30xxb_fw;
 		ts_fw_size = sizeof(ist30xxb_fw);
 		ts_param = (u8 *)ist30xxb_param;
@@ -1518,7 +1488,6 @@ int ist30xx_auto_bin_update(struct ist30xx_data *data)
 	mutex_lock(&ist30xx_mutex);
 	ret = ist30xx_check_auto_update(data);
 	mutex_unlock(&ist30xx_mutex);
-	
 	if (ret >= 0)
 		return ret;
 

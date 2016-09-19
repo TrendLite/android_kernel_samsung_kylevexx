@@ -197,7 +197,7 @@ int bcmpmu_add_notifier(u32 event_id, struct notifier_block *notifier)
 		return -EAGAIN;
 	}
 
-	if (unlikely(event_id >= PMU_EVENT_MAX)) {
+	if (unlikely(event_id >= BCMPMU_EVENT_MAX)) {
 		pr_err("%s: Invalid event id\n", __func__);
 		return -EINVAL;
 	}
@@ -213,7 +213,7 @@ int bcmpmu_remove_notifier(u32 event_id, struct notifier_block *notifier)
 		return -EAGAIN;
 	}
 
-	if (unlikely(event_id >= PMU_EVENT_MAX)) {
+	if (unlikely(event_id >= BCMPMU_EVENT_MAX)) {
 		pr_err("%s: Invalid event id\n", __func__);
 		return -EINVAL;
 	}
@@ -246,27 +246,19 @@ EXPORT_SYMBOL(bcmpmu_reg_write_unlock);
 
 void bcmpmu_client_power_off(void)
 {
-	u8 val = 0;
 	BUG_ON(!bcmpmu_gbl);
-	preempt_disable();
-	local_irq_disable();
-	pwr_mgr_pmu_reg_read_direct((u8) DEC_REG_ADD(PMU_REG_WRPROEN),
-				bcmpmu_get_slaveid(bcmpmu_gbl,
-					PMU_REG_WRPROEN),
-				&val);
-	if (!(val & (WRPROEN_DIS_WR_PRO | WRPROEN_PMU_UNLOCK)))
-		pwr_mgr_pmu_reg_write_direct((u8)
-					DEC_REG_ADD(PMU_REG_WRLOCKKEY),
-					bcmpmu_get_slaveid(bcmpmu_gbl,
-						PMU_REG_WRLOCKKEY),
-					WRLOCKKEY_VAL);
 
-	pwr_mgr_pmu_reg_write_direct((u8) DEC_REG_ADD(PMU_REG_HOSTCTRL1),
-					bcmpmu_get_slaveid(bcmpmu_gbl,
-						PMU_REG_HOSTCTRL1),
+#ifdef CONFIG_MFD_BCM_PWRMGR_SW_SEQUENCER
+	pwr_mgr_set_i2c_mode(PWR_MGR_I2C_MODE_POLL);
+#endif
+	bcmpmu_reg_write_unlock(bcmpmu_gbl);
+	bcmpmu_gbl->write_dev(bcmpmu_gbl, PMU_REG_HOSTCTRL1,
 			HOSTCTRL1_SW_SHDWN);
-	local_irq_enable();
-	preempt_enable();
+
+#ifdef CONFIG_MFD_BCM_PWRMGR_SW_SEQUENCER
+	pwr_mgr_set_i2c_mode(PWR_MGR_I2C_MODE_IRQ);
+#endif
+
 }
 EXPORT_SYMBOL(bcmpmu_client_power_off);
 
@@ -453,7 +445,7 @@ static ssize_t bcmpmu_read(struct file *file, char *data, size_t len,
 			reg_enc = ENC_PMU_REG(FIFO_MODE, (u8)reg.map,
 					reg.addr);
 			ret = bcmpmu->read_dev(bcmpmu, reg_enc,
-					(u8 *)&reg.val);
+					&reg.val);
 			if (ret != 0) {
 				pr_pmucore(ERROR, "%s: read_dev failed.\n",
 				       __func__);
@@ -493,7 +485,7 @@ static long bcmpmu_ioctl_ltp(struct file *file, unsigned int cmd,
 			reg_enc = ENC_PMU_REG(FIFO_MODE, (u8)reg.map,
 					reg.addr);
 			ret = bcmpmu->read_dev(bcmpmu, reg_enc,
-					(u8 *)&value[0]);
+					&value[0]);
 			if (ret != 0) {
 				pr_pmucore(ERROR, "%s: read_dev failed.\n",
 				       __func__);
@@ -529,7 +521,7 @@ static long bcmpmu_ioctl_ltp(struct file *file, unsigned int cmd,
 				reg_enc = ENC_PMU_REG(FIFO_MODE, (u8)reg.map,
 						reg.addr);
 				ret = bcmpmu->read_dev_bulk(bcmpmu, reg_enc,
-						(u8 *)&value[0], reg.len);
+						&value[0], reg.len);
 				if (ret != 0) {
 					pr_pmucore(ERROR,
 					       "%s: read_dev_bulk failed.\n",
@@ -636,45 +628,36 @@ static struct miscdevice bcmpmu_device = {
 	MISC_DYNAMIC_MINOR, "bcmpmu", &bcmpmu_fops
 };
 
-static void bcmpmu59xxx_reg_update(struct bcmpmu59xxx *pmu,
-		struct bcmpmu59xxx_rw_data *data, int max)
+static void bcmpmu_register_init(struct bcmpmu59xxx *pmu)
 {
+	struct bcmpmu59xxx_platform_data *pdata;
 	int i;
 	u8 temp;
-	for (i = 0; i < max; i++) {
-		if (!data[i].mask)
+	pdata = pmu->pdata;
+	for (i = 0; i < pdata->init_max; i++) {
+		if (!pdata->init_data[i].mask)
 			continue;
-		else if (data[i].mask ==  0xFF)
-			pmu->write_dev(pmu, data[i].addr, data[i].val);
+		else if (pdata->init_data[i].mask ==  0xFF)
+			pmu->write_dev(pmu,
+					pdata->init_data[i].addr,
+					pdata->init_data[i].val);
 		else {
-			pmu->read_dev(pmu, data[i].addr, &temp);
-			temp &= ~(data[i].mask);
-			temp |= (data[i].val & data[i].mask);
-			pmu->write_dev(pmu, data[i].addr, temp);
+			pmu->read_dev(pmu,
+					pdata->init_data[i].addr,
+					&temp);
+			temp &= ~(pdata->init_data[i].mask);
+			temp |= (pdata->init_data[i].val &
+				pdata->init_data[i].mask);
+			pmu->write_dev(pmu,
+					pdata->init_data[i].addr,
+					temp);
 		}
 	}
 }
 
-static void bcmpmu_register_init(struct bcmpmu59xxx *pmu)
-{
-	struct bcmpmu59xxx_platform_data *pdata;
-	pdata = pmu->pdata;
-
-	bcmpmu59xxx_reg_update(pmu, pdata->init_data, pdata->init_max);
-}
-
-static void bcmpmu59xxx_shutdown(struct platform_device *pdev)
-{
-	struct bcmpmu59xxx *bcmpmu = pdev->dev.platform_data;
-	struct bcmpmu59xxx_platform_data *pdata = bcmpmu->pdata;
-
-	bcmpmu59xxx_reg_update(bcmpmu, pdata->exit_data, pdata->exit_max);
-}
-
-static int bcmpmu59xxx_probe(struct platform_device *pdev)
+static int __devinit bcmpmu59xxx_probe(struct platform_device *pdev)
 {
 	int ret = 0, size, i;
-	u8 val;
 	struct bcmpmu59xxx *bcmpmu = pdev->dev.platform_data;
 	struct bcmpmu59xxx_platform_data *pdata = bcmpmu->pdata;
 	struct mfd_cell *pmucells ;
@@ -697,39 +680,24 @@ static int bcmpmu59xxx_probe(struct platform_device *pdev)
 	/*Copy flags from pdata*/
 	bcmpmu->flags = bcmpmu->pdata->flags;
 
+
 #ifdef CONFIG_MACH_HAWAII_SS_COMMON
+	/* Disable ACLD for Samsung Hawaii LoganDS project */
+	pr_pmucore(INIT, "ACLD: Disabled!");
 	bcmpmu->flags &= ~BCMPMU_ACLD_EN;
-#endif
-
-	/* Check ACLD for A1 PMU */
-	if (bcmpmu->rev_info.prj_id == BCMPMU_59054_ID) {
-		if (bcmpmu->rev_info.ana_rev >= BCMPMU_59054A1_ANA_REV) {
-			if (bcmpmu->flags & BCMPMU_ACLD_EN)
-				pr_pmucore(INIT, "ACLD: Enabled");
-			else
-				pr_pmucore(INIT, "ACLD: Disabled!");
-		} else {
-			if (bcmpmu->flags & BCMPMU_ACLD_EN) {
-				pr_pmucore(INIT,
-						"No ACLD for 59054A0 ACLD");
-				bcmpmu->flags &= ~BCMPMU_ACLD_EN;
-			}
-		}
-	}
 	pr_pmucore(INIT, "bcmpmu->flags = 0x%x\n", bcmpmu->flags);
-
-#ifdef CONFIG_MACH_HAWAII_SS_COMMON
-	bcmpmu->read_dev(bcmpmu, PMU_REG_OTG_BOOSTCTRL3, &val);
-	pr_pmucore(INIT, "+++PMU_REG_OTG_BOOSTCTRL3 = 0x%x\n", val);
-	if (bcmpmu->flags & BCMPMU_ACLD_EN) {
-		val |= ACLD_ENABLE_MASK;	// Enable MBC_TURBO bit
-		pr_pmucore(INIT, "MBC regulate input side VBUS\n");
+#else
+	/* Enable ACLD for A1 PMU */
+#if 0
+	if ((bcmpmu->rev_info.prj_id == BCMPMU_59054_ID) &&
+			(bcmpmu->rev_info.ana_rev >= BCMPMU_59054A1_ANA_REV)) {
+		pr_pmucore(INIT, "ACLD: Enabled");
+		bcmpmu->flags |= BCMPMU_ACLD_EN;
+		pr_pmucore(INIT, "bcmpmu->flags = 0x%x (Activate BCMPMU_ACLD_EN)\n", bcmpmu->flags);
 	} else {
-		val &= ~ACLD_ENABLE_MASK;	// Disable MBC_TURBO bit
-		pr_pmucore(INIT, "MBC regulate output side VMBAT\n");
+		pr_pmucore(INIT, "bcmpmu->flags = 0x%x (Deactive BCMPMU_ACLD_EN)\n", bcmpmu->flags);
 	}
-	bcmpmu->write_dev(bcmpmu, PMU_REG_OTG_BOOSTCTRL3, val);
-	pr_pmucore(INIT, "---PMU_REG_OTG_BOOSTCTRL3 = 0x%x\n", val);
+#endif
 #endif
 
 	bcmpmu_gbl = bcmpmu;
@@ -747,7 +715,7 @@ static int bcmpmu59xxx_probe(struct platform_device *pdev)
 	if (ret < 0)
 		pr_pmucore(ERROR, "Misc Register failed");
 
-	for (i = 0; i < PMU_EVENT_MAX; i++) {
+	for (i = 0; i < BCMPMU_EVENT_MAX; i++) {
 		bcmpmu->event[i].event_id = i;
 		BLOCKING_INIT_NOTIFIER_HEAD(&bcmpmu->event[i].notifiers);
 	}
@@ -755,7 +723,7 @@ err:
 	return ret;
 }
 
-static int bcmpmu59xxx_remove(struct platform_device *pdev)
+static int __devexit bcmpmu59xxx_remove(struct platform_device *pdev)
 {
 	struct bcmpmu59xxx *bcmpmu = pdev->dev.platform_data;
 	mfd_remove_devices(bcmpmu->dev);
@@ -771,8 +739,7 @@ static struct platform_driver bcmpmu59xxx_driver = {
 		   .name = "bcmpmu59xxx_core",
 		   },
 	.probe = bcmpmu59xxx_probe,
-	.remove = bcmpmu59xxx_remove,
-	.shutdown = bcmpmu59xxx_shutdown,
+	.remove = __devexit_p(bcmpmu59xxx_remove),
 };
 
 static int __init bcmpmu59xxx_init(void)

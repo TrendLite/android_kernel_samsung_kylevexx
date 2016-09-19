@@ -131,6 +131,7 @@ struct platform_device mobicore_device = {
 atomic_t nohz_pause = ATOMIC_INIT(0);
 EXPORT_SYMBOL(nohz_pause);
 
+
 /* dynamic ETM support */
 unsigned int etm_on;
 EXPORT_SYMBOL(etm_on);
@@ -719,13 +720,9 @@ struct platform_device hawaii_otg_platform_device = {
 #ifdef CONFIG_KONA_CPU_FREQ_DRV
 struct kona_freq_tbl kona_freq_tbl[] = {
 	FTBL_INIT(312000, PI_OPP_ECONOMY, TEMP_DONT_CARE),
-	FTBL_INIT(600000, PI_OPP_NORMAL, 100),
-	FTBL_INIT(800000, PI_OPP_TURBO, TEMP_DONT_CARE),
+	FTBL_INIT(499999, PI_OPP_NORMAL, 100),
+	FTBL_INIT(666667, PI_OPP_TURBO, TEMP_DONT_CARE),
 	FTBL_INIT(1000000, PI_OPP_SUPER_TURBO, 85),
-	FTBL_INIT(1300000, PI_OPP_SUPER_TURBO, 85),
-	FTBL_INIT(1400000, PI_OPP_SUPER_TURBO, 85),
-	FTBL_INIT(1500000, PI_OPP_SUPER_TURBO, 85),
-	FTBL_INIT(1600000, PI_OPP_SUPER_TURBO, 85),
 };
 
 void hawaii_cpufreq_init(void)

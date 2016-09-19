@@ -18,7 +18,7 @@
 
 
 #define IST30XX_INTERNAL_BIN    (1)
-#define IST30XX_MULTIPLE_TSP    (1)
+#define IST30XX_MULTIPLE_TSP    (0)
 
 #if IST30XX_INTERNAL_BIN
 #define IST30XX_UPDATE_BY_WORKQUEUE     (0)
@@ -65,8 +65,8 @@
 
 #define TSP_TYPE_ALPS           (0xF)
 #define TSP_TYPE_EELY           (0xE)
-#define TSP_TYPE_TOP            (0xD)
-#define TSP_TYPE_ILJIN          (0xB)
+#define TSP_TYPE_TOP            (0x7)
+
 #define PARSE_FLAG_FW           (1)
 #define PARSE_FLAG_PARAM        (2)
 

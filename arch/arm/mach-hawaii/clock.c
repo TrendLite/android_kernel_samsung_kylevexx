@@ -6462,17 +6462,25 @@ Bus clock name H264_AXI
 */
 static int h264_axi_clk_enable(struct clk *clk, int enable)
 {
+	int ret = 0;
 	clk_dbg("%s: enable: %d\n", __func__, enable);
 
 	BUG_ON(clk->id != CLK_H264_AXI_BUS_CLK_ID);
 	if (enable) {
+		ret = gen_bus_clk_ops.enable(clk, 1);
+		if(ret)
+			return ret;
+		udelay(10);
 		clk_dbg("%s: clear H264_S_CTRL\n", __func__);
 		writel(0x0, KONA_H264ASYNC_VA + ASB_H264_S_CTRL_OFFSET);
+		udelay(10);
 		writel(0x0, KONA_H264ASYNC_VA + ASB_H264_M_CTRL_OFFSET);
-	} else
+		udelay(10);
+	} else {
+		ret = gen_bus_clk_ops.enable(clk, 0);
 		clk_dbg("%s: last disable\n", __func__);
-
-	return gen_bus_clk_ops.enable(clk, enable);
+	}
+	return ret;
 }
 
 struct gen_clk_ops h264_axi_clk_ops;
