@@ -172,44 +172,6 @@ static void AudDrv_VOIP_FillDL_CB(void *pPrivate, u8 *pDst, u32 nSize, u32 *time
 /* static UInt8 sVoIPAMRSilenceFrame[1] = {0x000f}; */
 static UInt32 delay_count;	/* 20ms each count */
 
-<<<<<<< HEAD
-//static int timer_i;
-/*
-static enum hrtimer_restart TimerFunction(struct hrtimer *timer)
-{
-#ifdef CONFIG_AUDIO_S2
-	switch (timer_i++) {
-	case 0:
-			S2_vibtonz_en(1);
-		break;
-
-	case 1:
-	case 2:
-			S2_vibtonz_pwm(125);
-		break;
-
-	case 3:
-	case 4:
-			S2_vibtonz_pwm(-125);
-		break;
-
-	case 5:
-			S2_vibtonz_en(0);
-		break;
-
-	default:
-		break;
-	}
-#endif
-	if (timer_i > 5)
-		return HRTIMER_NORESTART;
-
-	hrtimer_forward_now(timer, ktime_set(0, (5 * 1000000)));
-	return HRTIMER_RESTART;
-}
-*/
-=======
->>>>>>> 41510cb... sound: Update caph_hawaii sound driver
 /* callback for buffer ready of pull mode */
 static void AudDrv_VOIP_DumpUL_CB(void *pPrivate, u8 *pSrc, u32 nSize)
 {

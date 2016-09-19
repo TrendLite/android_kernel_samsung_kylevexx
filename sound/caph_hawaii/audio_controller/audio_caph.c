@@ -188,8 +188,6 @@ static struct completion complete_kfifo;
 static struct TAudioHalThreadData sgThreadData;
 
 static DEFINE_MUTEX(mutexBlock);
-/** BEGIN: not support 48KHz recording during voice call */
-static int record48K_in_call_is_blocked;
 
 #define KFIFO_SIZE		2048
 #define BLOCK_WAITTIME_MS	60000
@@ -748,21 +746,14 @@ Result_t AUDIO_Ctrl_Trigger(BRCM_AUDIO_ACTION_en_t action_code,
 	unsigned long t_flag;
 	int is_atomic;
 	int is_cb = 0;
-<<<<<<< HEAD
-=======
 	/** BEGIN: not support 48KHz recording during voice call */
 	static int record48K_in_call_is_blocked;
->>>>>>> 41510cb... sound: Update caph_hawaii sound driver
 
 #if defined(CONFIG_BCM_MODEM)
 	if (is_dsp_timeout())
 		return RESULT_OK;
-<<<<<<< HEAD
-	
-=======
 #endif
 
->>>>>>> 41510cb... sound: Update caph_hawaii sound driver
 	if (action_code == ACTION_AUD_StartRecord) {
 
 		BRCM_AUDIO_Param_Start_t param_start;

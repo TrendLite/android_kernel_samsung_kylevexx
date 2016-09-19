@@ -33,11 +33,7 @@ the GPL, without Broadcom's express prior written consent.
 #include <linux/delay.h>
 #include <linux/moduleparam.h>
 #include <linux/sched.h>
-<<<<<<< HEAD
-
-=======
 #include <linux/semaphore.h>
->>>>>>> 41510cb... sound: Update caph_hawaii sound driver
 #include <sound/core.h>
 #include <sound/control.h>
 #include <sound/pcm_params.h>
@@ -113,23 +109,11 @@ struct __bcm_caph_hwdep_voip {
 	int ulstarted;
 };
 #define	bcm_caph_hwdep_voip_t struct __bcm_caph_hwdep_voip
-<<<<<<< HEAD
-
-static const u16 sVoIPFrameLen[] = { 320, 158, 36, 164, 640, 68 };
-
-static u16 sVoIPAMRSilenceFrame[1] = { 0x000f };
-
-static u32 voipInstCnt;
-
-static Boolean isVoLTE = FALSE;
-
-=======
 static const u16 svoipframelen[] = { 320, 158, 36, 164, 640, 68 };
 static u16 svoipamrsilenceframe[1] = { 0x000f };
 static u32 voipinstcnt;
 static struct semaphore sVoipAction; /* critical region protection */
 static Boolean isvolte = FALSE;
->>>>>>> 41510cb... sound: Update caph_hawaii sound driver
 bcm_caph_voip_log_t voip_log;
 /* local functions */
 static void HWDEP_VOIP_DumpUL_CB(void *pPrivate, u8 * pSrc, u32 nSize);
@@ -441,26 +425,7 @@ static ssize_t voip_write(struct file *filep, const char __user *buf,
 		ret = 0;
 	return ret;
 }
-<<<<<<< HEAD
-
-static int hwdep_open(struct snd_hwdep *hw, struct file *file)
-{
-	aTrace(LOG_ALSA_INTERFACE , "ALSA-CAPH VoIP_Ioctl_Open\n");
-
-	return 0;
-}
-
-static int hwdep_release(struct snd_hwdep *hw, struct file *file)
-{
-	aTrace(LOG_ALSA_INTERFACE , "ALSA-CAPH VoIP_Ioctl_Release\n");
-	return 0;
-}
-
-static int hwdep_ioctl(struct snd_hwdep *hw, struct file *file,
-		       unsigned int cmd, unsigned long arg)
-=======
 static long voip_ioctl(struct file *hw, unsigned int cmd, unsigned long arg)
->>>>>>> 41510cb... sound: Update caph_hawaii sound driver
 {
 	bcm_caph_hwdep_voip_t *pvoip;
 	voipdev *pvoipchrdevpvtdata;
@@ -472,20 +437,12 @@ static long voip_ioctl(struct file *hw, unsigned int cmd, unsigned long arg)
 	static UserCtrl_data_t *dataptr;
 	brcm_alsa_chip_t *pchip = NULL;
 	struct treq_sysparm_t *eq;
-<<<<<<< HEAD
-
-	pChip = (brcm_alsa_chip_t *)hw->card->private_data;
-
-	pVoIP = (bcm_caph_hwdep_voip_t *) hw->private_data;
-
-=======
 	struct snd_card *pcard = NULL;
 	int rc;
 	pvoipchrdevpvtdata = (voipdev *)hw->private_data;
 	pvoip = (bcm_caph_hwdep_voip_t *)pvoipchrdevpvtdata->pvoip;
 	pcard =  (struct snd_card *)pvoipchrdevpvtdata->card;
 	pchip = (brcm_alsa_chip_t *)pcard->private_data;
->>>>>>> 41510cb... sound: Update caph_hawaii sound driver
 	aTrace(LOG_ALSA_INTERFACE, "ALSA-CAPH hwdep_ioctl cmd=%08X\n", cmd);
 	switch (cmd) {
 	case VoIP_Ioctl_GetVersion:
@@ -494,10 +451,6 @@ static long voip_ioctl(struct file *hw, unsigned int cmd, unsigned long arg)
 	case VoIP_Ioctl_Start:
 		get_user(data, (int __user *)arg);
 		aTrace(LOG_ALSA_INTERFACE, "VoIP_Ioctl_Start type=%d (2==UL)"
-<<<<<<< HEAD
-			"voipInstCnt=%u\n", data, voipInstCnt);
-		if (voipInstCnt == 0) {	/* start VoIP only once */
-=======
 			"voipinstcnt=%u\n", data, voipinstcnt);
 		rc = down_interruptible(&sVoipAction);
 		if (rc)		
@@ -505,20 +458,13 @@ static long voip_ioctl(struct file *hw, unsigned int cmd, unsigned long arg)
 		
 		aTrace(LOG_ALSA_INTERFACE,"VoIP_Ioctl_Start: acquired sVoipAction\n");
 		if (voipinstcnt == 0) { /* start VoIP only once */
->>>>>>> 41510cb... sound: Update caph_hawaii sound driver
 			BRCM_AUDIO_Param_RateChange_t param_rate_change;
 			BRCM_AUDIO_Param_Open_t param_open;
 			BRCM_AUDIO_Param_Prepare_t parm_prepare;
 			BRCM_AUDIO_Param_Start_t param_start;
-<<<<<<< HEAD
-
-			voipInstCnt++;
-
-=======
 			voipinstcnt++;
 			aTrace(LOG_ALSA_INTERFACE,"voipinstcnt=%d\n", voipinstcnt);
 #if 0
->>>>>>> 41510cb... sound: Update caph_hawaii sound driver
 			hw->private_data =
 			    kzalloc(sizeof(bcm_caph_hwdep_voip_t), GFP_KERNEL);
 			CAPH_ASSERT(hw->private_data);
@@ -538,25 +484,6 @@ static long voip_ioctl(struct file *hw, unsigned int cmd, unsigned long arg)
 			if (pvoip->buffer_handle)
 				memset((u8 *) pvoip->buffer_handle, 0,
 				       sizeof(audio_voip_driver_t));
-<<<<<<< HEAD
-			else
-				return -ENOMEM;
-			pVoIP->frame_size = sVoIPFrameLen[pVoIP->codec_type];
-
-			pVoIP->buffer_size =
-			    pVoIP->frame_size * VOIP_FRAMES_IN_BUFFER;
-
-			pVoIP->buffer_handle->voip_data_dl_buf_ptr =
-				kzalloc(pVoIP->buffer_size, GFP_KERNEL);
-			if (pVoIP->buffer_handle->voip_data_dl_buf_ptr) {
-				memset(pVoIP->buffer_handle->
-				       voip_data_dl_buf_ptr, 0,
-				       pVoIP->buffer_size);
-			} else {
-				kfree(pVoIP->buffer_handle);
-				pVoIP->buffer_handle = NULL;
-				return -ENOMEM;
-=======
 			else {
 				pvoip->buffer_handle = NULL;
 				voipinstcnt--;
@@ -574,7 +501,6 @@ static long voip_ioctl(struct file *hw, unsigned int cmd, unsigned long arg)
 
 				aTrace(LOG_ALSA_INTERFACE, "VoIP_Ioctl_Start: VoIPCmd forced UL codec [0x%x]\n",
 					pchip->voip_data.codec_type_ul);
->>>>>>> 41510cb... sound: Update caph_hawaii sound driver
 			}
 			pvoip->codec_type_ul = pchip->voip_data.codec_type_ul;
 			pvoip->frame_size_ul = svoipframelen[pvoip->
@@ -594,14 +520,6 @@ static long voip_ioctl(struct file *hw, unsigned int cmd, unsigned long arg)
 				       voip_data_ul_buf_ptr, 0,
 				       pvoip->buffer_size_ul);
 			else {
-<<<<<<< HEAD
-				kfree(pVoIP->buffer_handle->
-				      voip_data_ul_buf_ptr);
-				pVoIP->buffer_handle->
-				      voip_data_ul_buf_ptr = NULL;
-				kfree(pVoIP->buffer_handle);
-				pVoIP->buffer_handle = NULL;
-=======
 				if (pvoip->buffer_handle->
 					voip_data_dl_buf_ptr) {
 					kfree(pvoip->buffer_handle->
@@ -654,7 +572,6 @@ static long voip_ioctl(struct file *hw, unsigned int cmd, unsigned long arg)
 				voipinstcnt--;
 				up(&sVoipAction);
 				aError("voip_ioctl failed with ENOMEM 3");
->>>>>>> 41510cb... sound: Update caph_hawaii sound driver
 				return -ENOMEM;
 			}
 			param_open.drv_handle = NULL;
@@ -672,16 +589,11 @@ static long voip_ioctl(struct file *hw, unsigned int cmd, unsigned long arg)
 				      voip_data_ul_buf_ptr);
 				pvoip->buffer_handle->
 				      voip_data_ul_buf_ptr = NULL;
-<<<<<<< HEAD
-				kfree(pVoIP->buffer_handle);
-				pVoIP->buffer_handle = NULL;
-=======
 				kfree(pvoip->buffer_handle);
 				pvoip->buffer_handle = NULL;
 				voipinstcnt--;
 				up(&sVoipAction);
 				aError("voip_ioctl failed with ENOMEM 4");
->>>>>>> 41510cb... sound: Update caph_hawaii sound driver
 				return -ENOMEM;
 			}
 			/* set UL callback */
@@ -734,17 +646,6 @@ static long voip_ioctl(struct file *hw, unsigned int cmd, unsigned long arg)
 				voipinstcnt = 2;
 			aTrace(LOG_ALSA_INTERFACE,
 					"VoIP_Ioctl_Start -> just increment "
-<<<<<<< HEAD
-					"the count, voip already started\n");
-		}
-		if (pVoIP != NULL) {
-		if (data == VoIP_UL)
-			pVoIP->ulstarted = 1;
-		else
-			pVoIP->dlstarted = 1;
-		}
-
-=======
 					"the count, voip already started voipinstcnt=%d\n", voipinstcnt);
 		}
 		if (pvoip != NULL) {
@@ -755,46 +656,10 @@ static long voip_ioctl(struct file *hw, unsigned int cmd, unsigned long arg)
 		}
 		up(&sVoipAction);
 		aTrace(LOG_ALSA_INTERFACE, "VoIP_Ioctl_Start END voipinstcnt=%d\n",voipinstcnt);
->>>>>>> 41510cb... sound: Update caph_hawaii sound driver
 		break;
 	case VoIP_Ioctl_Stop:
 		get_user(data, (int __user *)arg);
 		aTrace(LOG_ALSA_INTERFACE, "VoIP_Ioctl_Stop type=%d (2==UL) "
-<<<<<<< HEAD
-			"voipInstCnt=%u\n", data, voipInstCnt);
-
-		if (voipInstCnt == 2)
-			voipInstCnt--;
-		else if (voipInstCnt == 1) {
-			BRCM_AUDIO_Param_Stop_t param_stop;
-			BRCM_AUDIO_Param_Close_t param_close;
-
-			param_stop.drv_handle =
-				pVoIP->buffer_handle->drv_handle;
-			AUDIO_Ctrl_Trigger(ACTION_AUD_StopVoIP,
-				&param_stop, NULL, 0);
-
-			param_close.drv_handle =
-				pVoIP->buffer_handle->drv_handle;
-			AUDIO_Ctrl_Trigger(ACTION_AUD_CloseVoIP,
-				&param_close, NULL, 1);
-			kfree(pVoIP->buffer_handle->voip_data_dl_buf_ptr);
-			pVoIP->buffer_handle->voip_data_dl_buf_ptr = NULL;
-			kfree(pVoIP->buffer_handle->voip_data_ul_buf_ptr);
-			pVoIP->buffer_handle->voip_data_ul_buf_ptr = NULL;
-			kfree(pVoIP->buffer_handle);
-			pVoIP->buffer_handle = NULL;
-			pVoIP->status = VoIP_Hwdep_Status_Stopped;
-			wake_up(&pVoIP->sleep);
-			voipInstCnt = 0;
-		}
-
-		if (data == VoIP_UL)
-			pVoIP->ulstarted = 0;
-		else
-			pVoIP->dlstarted = 0;
-
-=======
 			"voipinstcnt=%u\n", data, voipinstcnt);
 		rc = down_interruptible(&sVoipAction);
 		if (rc)		
@@ -842,7 +707,6 @@ static long voip_ioctl(struct file *hw, unsigned int cmd, unsigned long arg)
 			wake_up(&pvoip->sleep);
 		}
 		up(&sVoipAction);
->>>>>>> 41510cb... sound: Update caph_hawaii sound driver
 		break;
 	case VoIP_Ioctl_SetSource:
 		aTrace(LOG_ALSA_INTERFACE ,
@@ -1170,19 +1034,6 @@ int voipdevicecreate(voipdev *pvoipchrdevpvtdata)
 		aError("error create hwdep device\n");
 		return err;
 	}
-<<<<<<< HEAD
-	pHwdep->iface = SNDRV_HWDEP_IFACE_OPL4;
-	pHwdep->ops.read = hwdep_read;
-	pHwdep->ops.write = hwdep_write;
-	pHwdep->ops.open = hwdep_open;
-	pHwdep->ops.release = hwdep_release;
-	pHwdep->ops.ioctl = hwdep_ioctl;
-	pHwdep->ops.mmap = hwdep_mmap;
-	pHwdep->ops.dsp_status = hwdep_dsp_status;
-	pHwdep->ops.poll = hwdep_poll;
-	pHwdep->private_free = hwdep_private_free;
-
-=======
 	cdev_init(&pvoipchrdevpvtdata->voipcdev, &voip_fops);
 	pvoipchrdevpvtdata->voipcdev.owner = THIS_MODULE;
 	pvoipchrdevpvtdata->voipcdev.ops = &voip_fops;
@@ -1200,7 +1051,6 @@ int voipdevicecreate(voipdev *pvoipchrdevpvtdata)
 	device_create(voipclass, NULL, MKDEV(BCM_VOIP_CHRDEV_MAJOR, 0), NULL,
 		"bcm_voip_chrdev");
 	sema_init(&sVoipAction, 1);
->>>>>>> 41510cb... sound: Update caph_hawaii sound driver
 	return err;
 }
 int voipdevicedestroy(voipdev *pvoipchrdevpvtdata)

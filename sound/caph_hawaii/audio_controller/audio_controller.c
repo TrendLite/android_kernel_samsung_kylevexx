@@ -191,7 +191,6 @@ static AudioMode_t currAudioMode_record = AUDIO_MODE_SPEAKERPHONE;
 
 static bool sExtraVol;
 static AudioApp_t sForcedApp = AUDIO_APP_DEFAULT;
-static AudioApp_t sPrevRecApp = AUDIO_APP_RECORDING_HQ; // to handle ALSA triggered PCM IN control, without special app setting.
 
 static struct regulator *vibra_reg;
 
@@ -478,9 +477,9 @@ void AUDCTRL_EnableTelephony(AUDIO_SOURCE_Enum_t source, AUDIO_SINK_Enum_t sink)
 		callType = VOIF_VT_CALL_NB;
         else if(app == AUDIO_APP_VT_CALL_WB)
 		callType = VOIF_VT_CALL_WB;
-	else if(app == AUDIO_APP_VOICE_CALL_WB)
+	else if(app == AUDIO_APP_VOICE_CALL_WB || app == AUDIO_APP_VOICE_CALL_WB_EXTRAVOL)
 		callType = VOIF_VOICE_CALL_WB;
-	else if(app == AUDIO_APP_VOICE_CALL)
+	else if(app == AUDIO_APP_VOICE_CALL || app == AUDIO_APP_VOICE_CALL_EXTRAVOL)
 		callType = VOIF_VOICE_CALL_NB;
 
 	VoIF_init(mode, hstype, callType);
@@ -550,8 +549,6 @@ void AUDCTRL_Telephony_RateChange(unsigned int sample_rate)
 	AudioApp_t pre_app, app;
 	AudioMode_t mode;
 	int bNeedDualMic;
-<<<<<<< HEAD
-=======
 	bool voipstatus;
 	int bTempmuteVoiceCall = bmuteVoiceCall;
 
@@ -559,7 +556,6 @@ void AUDCTRL_Telephony_RateChange(unsigned int sample_rate)
 	VoIF_CallType_t callType = VOIF_NO_CALL;
 #endif
 
->>>>>>> 41510cb... sound: Update caph_hawaii sound driver
 	aTrace(LOG_AUDIO_CNTLR, "%s sample_rate %d-->%d",
 	       __func__, voiceCallSampleRate, sample_rate);
 	if (cpReset || audioPathResetPending)
@@ -601,13 +597,16 @@ void AUDCTRL_Telephony_RateChange(unsigned int sample_rate)
 
 #ifdef CONFIG_ENABLE_VOIF
 		if (app == AUDIO_APP_VT_CALL)
-			VoIF_setCallType(VOIF_VT_CALL_NB);
+			callType = VOIF_VT_CALL_NB;
         	else if(app == AUDIO_APP_VT_CALL_WB)
-			VoIF_setCallType(VOIF_VT_CALL_WB);        
-		else if(app == AUDIO_APP_VOICE_CALL_WB)
-                    VoIF_setCallType(VOIF_VOICE_CALL_WB);
-		else if(app == AUDIO_APP_VOICE_CALL)
-                    VoIF_setCallType(VOIF_VOICE_CALL_NB);
+			callType = VOIF_VT_CALL_WB;
+		else if(app == AUDIO_APP_VOICE_CALL_WB || app == AUDIO_APP_VOICE_CALL_WB_EXTRAVOL)
+			callType = VOIF_VOICE_CALL_WB;
+		else if(app == AUDIO_APP_VOICE_CALL || app == AUDIO_APP_VOICE_CALL_EXTRAVOL)
+			callType = VOIF_VOICE_CALL_NB;
+
+		if (callType != VoIF_getCallType())
+			VoIF_setCallType(callType);
 #endif
 
 		AUDCTRL_Telephony_HW_16K(mode);
@@ -814,12 +813,10 @@ void AUDCTRL_SetTelephonyMicSpkr(AUDIO_SOURCE_Enum_t source,
 	AudioMode_t mode;
 	AudioApp_t app = AUDIO_APP_VOICE_CALL;
 	int bNeedDualMic = FALSE;
-<<<<<<< HEAD
-=======
 	int bTempmuteVoiceCall = bmuteVoiceCall;
 
->>>>>>> 41510cb... sound: Update caph_hawaii sound driver
 #ifdef CONFIG_ENABLE_VOIF
+	VoIF_CallType_t callType = VOIF_NO_CALL;
 	VoIF_HeadsetType_t hstype = VOIF_OTHER_TYPE;
 #endif
 
@@ -901,13 +898,7 @@ void AUDCTRL_SetTelephonyMicSpkr(AUDIO_SOURCE_Enum_t source,
 		} else {
 			AUDCTRL_SetTelephonyMicMute(AUDIO_SOURCE_UNDEFINED, 1);
 		}
-<<<<<<< HEAD
-
-		powerOnExternalAmp(voiceCallSpkr, TelephonyUse,
-				FALSE, FALSE);
-=======
 		powerOnExternalAmp(voiceCallSpkr, TelephonyUse, FALSE, FALSE);
->>>>>>> 41510cb... sound: Update caph_hawaii sound driver
 		wait_before_pmu_off = 0;
 	}
 
@@ -931,14 +922,8 @@ void AUDCTRL_SetTelephonyMicSpkr(AUDIO_SOURCE_Enum_t source,
 			curTelephonyPathID->dlPathID);
 	}
 
-<<<<<<< HEAD
-	if (voiceCallSpkr != sink || force == true) {
-		powerOnExternalAmp(sink, TelephonyUse,
-				TRUE, FALSE);
-=======
 	if (voiceCallSpkr != sink || voice_app_updated == TRUE || force == true) {
 		powerOnExternalAmp(sink, TelephonyUse, TRUE, FALSE);
->>>>>>> 41510cb... sound: Update caph_hawaii sound driver
 
 		if (force == true) {
 			AUDCTRL_ConfigWait(AUDCTRL_WAIT_HSPMU_ON, -1);
@@ -997,20 +982,17 @@ void AUDCTRL_SetTelephonyMicSpkr(AUDIO_SOURCE_Enum_t source,
 	
 	VoIF_modeChange(mode, hstype);
 
-	if (VoIF_getCallType() != VOIF_VT_CALL_NB && VoIF_getCallType() != VOIF_VT_CALL_WB)
-	{
 	    if(app == AUDIO_APP_VT_CALL)
-                VoIF_setCallType(VOIF_VT_CALL_NB);
+		callType = VOIF_VT_CALL_NB;
 	    else if(app == AUDIO_APP_VT_CALL_WB)
-                VoIF_setCallType(VOIF_VT_CALL_WB);
-	}
-	else if(VoIF_getCallType() != VOIF_VOICE_CALL_NB && VoIF_getCallType() != VOIF_VOICE_CALL_WB)
-	{
-	    if(app == AUDIO_APP_VOICE_CALL)
-		VoIF_setCallType(VOIF_VOICE_CALL_NB);
-	    else if(app == AUDIO_APP_VOICE_CALL_WB)
-		VoIF_setCallType(VOIF_VOICE_CALL_WB);
-	}
+		callType = VOIF_VT_CALL_WB;
+	else if(app == AUDIO_APP_VOICE_CALL_WB || app == AUDIO_APP_VOICE_CALL_WB_EXTRAVOL)
+		callType = VOIF_VOICE_CALL_WB;
+	else if(app == AUDIO_APP_VOICE_CALL || app == AUDIO_APP_VOICE_CALL_EXTRAVOL)
+		callType = VOIF_VOICE_CALL_NB;
+
+	if (callType != VoIF_getCallType())
+		VoIF_setCallType(callType);
 #endif
 }
 
@@ -1072,7 +1054,7 @@ void AUDCTRL_SetTelephonySpkrVolume(AUDIO_SINK_Enum_t speaker,
 		if (telephony_dl_gain_dB < -(p->voice_volume_max))
 			telephony_dl_gain_dB = -(p->voice_volume_max);
 
-		if((app != AUDIO_APP_LOOPBACK) || (mode != AUDIO_SINK_HEADSET))
+		if((app != AUDIO_APP_LOOPBACK) || (mode != AUDIO_MODE_HEADSET))
 		{
 		user_vol_setting[app][mode].L = volume;
 			user_vol_setting[app][mode].R = volume;      
@@ -1344,14 +1326,12 @@ void AUDCTRL_RemoveAudioApp(AudioApp_t audio_app)
 		sAudioAppStates[audio_app] = FALSE;
 
 	if (audio_app == AUDIO_APP_VOICE_CALL)
+	{
 		sAudioAppStates[AUDIO_APP_VOICE_CALL_WB] = FALSE;
-<<<<<<< HEAD
-=======
 		sAudioAppStates[AUDIO_APP_VOICE_CALL_EXTRAVOL] = FALSE;
 		sAudioAppStates[AUDIO_APP_VOICE_CALL_WB_EXTRAVOL] = FALSE;
 		sForcedApp = AUDIO_APP_DEFAULT;
 	}
->>>>>>> 41510cb... sound: Update caph_hawaii sound driver
 
 	aTrace(LOG_AUDIO_CNTLR, "%s Removed audio_app=%d", __func__, audio_app);
 
@@ -1819,21 +1799,11 @@ void AUDCTRL_GetSrcSinkByMode(AudioMode_t mode, AUDIO_SOURCE_Enum_t *pMic,
 		break;
 
 	default:
-<<<<<<< HEAD
-		/*must set a default, o.w. it would be used uninitialized*/
-		*pMic = AUDIO_SOURCE_ANALOG_MAIN;
-		*pSpk = AUDIO_SINK_LOUDSPK;
-		aWarn(
-				"AUDCTRL_GetSrcSinkByMode()"
-				"mode %d is out of range\n",
-				mode);
-=======
 		/*must set a default, o.w. it would be used uninitialized */
 		*pMic = AUDIO_SOURCE_ANALOG_MAIN;
 		*pSpk = AUDIO_SINK_LOUDSPK;
 		aWarn("AUDCTRL_GetSrcSinkByMode()" \
 		      "mode %d is out of range\n", mode);
->>>>>>> 41510cb... sound: Update caph_hawaii sound driver
 		break;
 	}
 }
@@ -2141,8 +2111,8 @@ void AUDCTRL_DisablePlay(AUDIO_SOURCE_Enum_t source,
 		}
 	}
 
-	playbackPathID = NULL;
-	pathIDTuning = NULL;
+	playbackPathID = 0;
+	pathIDTuning = 0;
 
 	if (audioPathResetPending && csl_caph_hwctrl_allPathsDisabled()) {
 		AUDDRV_CPResetCleanup();
@@ -2374,9 +2344,9 @@ void AUDCTRL_SetPlayVolume(AUDIO_SOURCE_Enum_t source,
 			if (mixer == CSL_CAPH_SRCM_STEREO_CH2_L
 				|| mixer == CSL_CAPH_SRCM_STEREO_CH2_R) {
 				/*mono output*/
-				if ((int)mixInCh == (int)CAPH_SRCM_CH5 ||
-					(int)mixInCh == (int)CAPH_SRCM_PASSCH1 ||
-					(int)mixInCh == (int)CAPH_SRCM_PASSCH2) {
+				if (mixInCh == CSL_CAPH_SRCM_STEREO_CH5 ||
+					mixInCh == CSL_CAPH_SRCM_STEREO_PASS_CH1 ||
+					mixInCh == CSL_CAPH_SRCM_STEREO_PASS_CH2) {
 					/*only on stereo inputs.*/
 					mixInGain = mixInGain - 600;
 					mixInGain_r = mixInGain_r - 600;
@@ -2570,9 +2540,9 @@ void AUDCTRL_SetPlayVolume(AUDIO_SOURCE_Enum_t source,
 		if (mixer == CSL_CAPH_SRCM_STEREO_CH2_L
 			|| mixer == CSL_CAPH_SRCM_STEREO_CH2_R) {
 			/*mono output*/
-			if ((int)mixInCh == (int)CAPH_SRCM_CH5 ||
-				(int)mixInCh == (int)CAPH_SRCM_PASSCH1 ||
-				(int)mixInCh == (int)CAPH_SRCM_PASSCH2) {
+			if (mixInCh == CSL_CAPH_SRCM_STEREO_CH5 ||
+				mixInCh == CSL_CAPH_SRCM_STEREO_PASS_CH1 ||
+				mixInCh == CSL_CAPH_SRCM_STEREO_PASS_CH2) {
 				/*only on stereo inputs.*/
 				mixInGain = mixInGain - 600;
 				mixInGain_r = mixInGain_r - 600;
@@ -2727,9 +2697,9 @@ void AUDCTRL_SetPlayMute(AUDIO_SOURCE_Enum_t source,
 				if (mixer == CSL_CAPH_SRCM_STEREO_CH2_L
 					|| mixer == CSL_CAPH_SRCM_STEREO_CH2_R) {
 					/*mono output*/
-					if ((int)mixInCh == (int)CAPH_SRCM_CH5 ||
-						(int)mixInCh == (int)CAPH_SRCM_PASSCH1 ||
-						(int)mixInCh == (int)CAPH_SRCM_PASSCH2) {
+					if (mixInCh == CSL_CAPH_SRCM_STEREO_CH5 ||
+						mixInCh == CSL_CAPH_SRCM_STEREO_PASS_CH1 ||
+						mixInCh == CSL_CAPH_SRCM_STEREO_PASS_CH2) {
 						/*only on stereo inputs.*/
 						mixInGain = mixInGain - 600;
 						mixInGainR = mixInGainR - 600;
@@ -3277,28 +3247,11 @@ void AUDCTRL_EnableRecord(AUDIO_SOURCE_Enum_t source,
 		return;
 
 	/* for amixer command */
-<<<<<<< HEAD
-	if (!AUDCTRL_IsRecApp(app))
-	{
-		switch (sr)
-		{
-			case AUDIO_SAMPLING_RATE_8000:
-		app = AUDIO_APP_RECORDING;
-				break;
-			case AUDIO_SAMPLING_RATE_16000:
-=======
 	if (!AUDCTRL_IsRecApp(app) && sr == AUDIO_SAMPLING_RATE_8000) {
 		app = AUDIO_APP_RECORDING;
 		AUDCTRL_SaveAudioApp(app);
 	} else if (!AUDCTRL_IsRecApp(app) && sr == AUDIO_SAMPLING_RATE_16000) {
->>>>>>> 41510cb... sound: Update caph_hawaii sound driver
 		app = AUDIO_APP_RECORDING_WB;
-				break;
-			case AUDIO_SAMPLING_RATE_48000:
-				if (app != AUDIO_APP_FM_RADIO)
-					app = sPrevRecApp;
-				break;
-		}
 		AUDCTRL_SaveAudioApp(app);
 	}
 
@@ -3384,8 +3337,6 @@ void AUDCTRL_DisableRecord(AUDIO_SOURCE_Enum_t source,
 {
 	CSL_CAPH_HWConfig_Table_t *path = NULL;
 	CSL_CAPH_HWCTRL_CONFIG_t config;
-	AudioApp_t app;
-
 	aTrace(LOG_AUDIO_CNTLR, "%s src 0x%x, sink 0x%x\n",
 	       __func__, source, sink);
 
@@ -3410,11 +3361,7 @@ void AUDCTRL_DisableRecord(AUDIO_SOURCE_Enum_t source,
 	if (path == NULL)
 		return;
 
-	app = AUDCTRL_GetAudioApp();
-	if (AUDCTRL_IsRecApp(app))
-		sPrevRecApp = app;
 	AUDCTRL_RemoveRecApp(AUDIO_APP_RECORDING);
-
 	if (source == AUDIO_SOURCE_SPEECH_DIGI) {
 		/* Not supported - One stream - two paths use case for record.
 		   Will be supported with one path itself */
@@ -3696,19 +3643,12 @@ static void AUDCTRL_RemoveVoiceApp(AudioApp_t app)
 	if (app == AUDIO_APP_VOICE_CALL ||
 	    app == AUDIO_APP_VOICE_CALL_WB ||
 		app == AUDIO_APP_LOOPBACK ||
-<<<<<<< HEAD
-		app == AUDIO_APP_VT_CALL ||
-		app == AUDIO_APP_VT_CALL_WB ||
-		app == AUDIO_APP_VOIP ||
-		app == AUDIO_APP_VOIP_INCOMM) {
-=======
 	    app == AUDIO_APP_VT_CALL ||
 	    app == AUDIO_APP_VT_CALL_WB ||
 	    app == AUDIO_APP_VOIP ||
 		app == AUDIO_APP_VOIP_INCOMM ||
 		app == AUDIO_APP_VOICE_CALL_EXTRAVOL ||
 		app == AUDIO_APP_VOICE_CALL_WB_EXTRAVOL) {
->>>>>>> 41510cb... sound: Update caph_hawaii sound driver
 		sAudioAppStates[AUDIO_APP_VOICE_CALL] = FALSE;
 		sAudioAppStates[AUDIO_APP_VOICE_CALL_WB] = FALSE;
 		sAudioAppStates[AUDIO_APP_LOOPBACK] = FALSE;
@@ -3716,12 +3656,9 @@ static void AUDCTRL_RemoveVoiceApp(AudioApp_t app)
 		sAudioAppStates[AUDIO_APP_VT_CALL_WB] = FALSE;
 		sAudioAppStates[AUDIO_APP_VOIP] = FALSE;
 		sAudioAppStates[AUDIO_APP_VOIP_INCOMM] = FALSE;
-<<<<<<< HEAD
-=======
 		sAudioAppStates[AUDIO_APP_VOICE_CALL_EXTRAVOL] = FALSE;
 		sAudioAppStates[AUDIO_APP_VOICE_CALL_WB_EXTRAVOL] = FALSE;
 		sForcedApp = AUDIO_APP_DEFAULT;
->>>>>>> 41510cb... sound: Update caph_hawaii sound driver
 	}
 }
 
@@ -3800,12 +3737,16 @@ static void AUDCTRL_FinalizeAudioApp(AudioMode_t mode)
 				app = AUDIO_APP_VOICE_CALL;
 			else if (app == AUDIO_APP_VT_CALL_WB)
 				app = AUDIO_APP_VT_CALL;
+			else if (app == AUDIO_APP_VOICE_CALL_WB_EXTRAVOL)
+				app = AUDIO_APP_VOICE_CALL_EXTRAVOL;
 		}
 		if (AUDCTRL_IsBTMWB() == TRUE) {
 			if (app == AUDIO_APP_VOICE_CALL)
 				app = AUDIO_APP_VOICE_CALL_WB;
 			else if (app == AUDIO_APP_VT_CALL)
 				app = AUDIO_APP_VT_CALL_WB;
+			else if (app == AUDIO_APP_VOICE_CALL_EXTRAVOL)
+				app = AUDIO_APP_VOICE_CALL_WB_EXTRAVOL;
 		}
 	} else {
 		if (voiceCallSampleRate == AUDIO_SAMPLING_RATE_16000) {
@@ -3813,11 +3754,15 @@ static void AUDCTRL_FinalizeAudioApp(AudioMode_t mode)
 				app = AUDIO_APP_VOICE_CALL_WB;
 			else if (app == AUDIO_APP_VT_CALL)
 				app = AUDIO_APP_VT_CALL_WB;
+			else if (app == AUDIO_APP_VOICE_CALL_EXTRAVOL)
+				app = AUDIO_APP_VOICE_CALL_WB_EXTRAVOL;
 		} else if (voiceCallSampleRate == AUDIO_SAMPLING_RATE_8000) {
 			if (app == AUDIO_APP_VOICE_CALL_WB)
 				app = AUDIO_APP_VOICE_CALL;
 			else if (app == AUDIO_APP_VT_CALL_WB)
 				app = AUDIO_APP_VT_CALL;
+			else if (app == AUDIO_APP_VOICE_CALL_WB_EXTRAVOL)
+				app = AUDIO_APP_VOICE_CALL_EXTRAVOL;
 		}
 	}
 	AUDCTRL_SaveAudioApp(app);
